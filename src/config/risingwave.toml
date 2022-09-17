@@ -8,6 +8,7 @@ connection_pool_size = 16
 checkpoint_interval_ms = 250
 in_flight_barrier_nums = 40
 worker_node_parallelism = 4
+minimal_scheduling = true
 
 [storage]
 shared_buffer_capacity_mb = 4096

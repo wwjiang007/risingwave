@@ -63,7 +63,7 @@ struct InnerConnectorSourceReaderHandle {
     join_handle: JoinHandle<()>,
 }
 
-const CONNECTOR_MESSAGE_BUFFER_SIZE: usize = 512;
+const CONNECTOR_MESSAGE_BUFFER_SIZE: usize = 10;
 
 /// [`ConnectorSource`] serves as a bridge between external components and streaming or
 /// batch processing. [`ConnectorSource`] introduces schema at this level while

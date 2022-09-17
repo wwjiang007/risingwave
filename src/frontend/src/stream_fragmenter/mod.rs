@@ -106,6 +106,7 @@ fn is_stateful_executor(stream_node: &StreamNode) -> bool {
 
 /// Do some dirty rewrites on meta. Currently, it will split stateful operators into two
 /// fragments.
+#[allow(dead_code)]
 fn rewrite_stream_node(
     state: &mut BuildFragmentGraphState,
     stream_node: StreamNode,
@@ -160,8 +161,8 @@ fn generate_fragment_graph(
     state: &mut BuildFragmentGraphState,
     stream_node: StreamNode,
 ) -> Result<()> {
-    let stateful = is_stateful_executor(&stream_node);
-    let stream_node = rewrite_stream_node(state, stream_node, stateful)?;
+    // let stateful = is_stateful_executor(&stream_node);
+    // let stream_node = rewrite_stream_node(state, stream_node, stateful)?;
     build_and_add_fragment(state, stream_node)?;
     Ok(())
 }
