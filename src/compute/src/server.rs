@@ -140,8 +140,8 @@ pub async fn compute_node_serve(
     // Related issues:
     // - https://github.com/risingwavelabs/risingwave/issues/8696
     // - https://github.com/risingwavelabs/risingwave/issues/8822
-    let total_memory_bytes = compute_memory_bytes + storage_memory_bytes;
-    let memory_control_policy = build_memory_control_policy(total_memory_bytes).unwrap();
+    // let total_memory_bytes = compute_memory_bytes + storage_memory_bytes;
+    let memory_control_policy = build_memory_control_policy(opts.total_memory_bytes).unwrap();
 
     let storage_opts = Arc::new(StorageOpts::from((
         &config,
