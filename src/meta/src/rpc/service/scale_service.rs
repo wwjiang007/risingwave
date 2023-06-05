@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use itertools::Itertools;
+use risingwave_common::bail;
 use risingwave_pb::common::WorkerType;
-use risingwave_pb::meta::reschedule_request::Reschedule;
+use risingwave_pb::meta::get_reschedule_plan_request::Strategy;
 use risingwave_pb::meta::scale_service_server::ScaleService;
 use risingwave_pb::meta::{
-    GetClusterInfoRequest, GetClusterInfoResponse, PauseRequest, PauseResponse, RescheduleRequest,
+    GetClusterInfoRequest, GetClusterInfoResponse, GetReschedulePlanRequest,
+    GetReschedulePlanResponse, PauseRequest, PauseResponse, Reschedule, RescheduleRequest,
     RescheduleResponse, ResumeRequest, ResumeResponse,
 };
 use risingwave_pb::source::{ConnectorSplit, ConnectorSplits};
@@ -163,5 +167,34 @@ where
             .await?;
 
         Ok(Response::new(RescheduleResponse { success: true }))
+    }
+
+    async fn get_reschedule_plan(
+        &self,
+        request: Request<GetReschedulePlanRequest>,
+    ) -> Result<Response<GetReschedulePlanResponse>, Status> {
+        // let req = request.into_inner();
+        // match req.strategy.unwrap() {
+        //     Strategy::Rebalance(strategy) => {
+        //         let workers = self
+        //             .cluster_manager
+        //             .list_worker_node(WorkerType::ComputeNode, None)
+        //             .await;
+        //
+        //         let target_worker_ids: HashSet<_> =
+        //             strategy.target_workers.iter().copied().collect();
+        //
+        //         let target_workers: HashSet<_> = workers
+        //             .iter()
+        //             .filter(|worker| target_worker_ids.contains(&worker.id))
+        //             .collect();
+        //
+        //         if target_worker_ids.len() != target_workers.len() {
+        //             bail!("?")
+        //         }
+        //     }
+        // }
+
+        todo!()
     }
 }
