@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+
 
 use itertools::Itertools;
-use risingwave_common::bail;
+
 use risingwave_pb::common::WorkerType;
-use risingwave_pb::meta::get_reschedule_plan_request::Strategy;
+
 use risingwave_pb::meta::scale_service_server::ScaleService;
 use risingwave_pb::meta::{
     GetClusterInfoRequest, GetClusterInfoResponse, GetReschedulePlanRequest,
@@ -171,7 +171,7 @@ where
 
     async fn get_reschedule_plan(
         &self,
-        request: Request<GetReschedulePlanRequest>,
+        _request: Request<GetReschedulePlanRequest>,
     ) -> Result<Response<GetReschedulePlanResponse>, Status> {
         // let req = request.into_inner();
         // match req.strategy.unwrap() {
