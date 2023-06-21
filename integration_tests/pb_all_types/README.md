@@ -6,7 +6,7 @@
 protoc --include_imports --descriptor_set_out=alltypes_schema ./alltypes.proto
 ```
 
-Similarly, you will also need to reproduce the golang file `alltypes.pb.go`. You can run protoc to regenerate the file:
+Similarly, you will also need to reproduce the golang file `alltypes.pb.go`. You can run protoc to regenerate the code:
 
 ```sh
 protoc --proto_path=./ alltypes.proto --go_out=./pbdatagen

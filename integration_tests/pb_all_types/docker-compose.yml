@@ -7,13 +7,15 @@ services:
       service: message_queue
 
   ingestor:
-    image: "docker.vectorized.io/vectorized/redpanda:latest"
+    build: ./ingestor
     volumes:
       - './records.bin:/data/records.bin'
     depends_on:
       - message_queue
-    command:
-      - topic produce --brokers message_queue:29092 'alltypes' < /data/records.bin
+    environment:
+      - KAFKA_BROKER=message_queue:29092
+      - TOPIC_NAME=alltypes
+      - DATA_FILE=/data/records.bin
     container_name: ingestor
 
   risingwave:
