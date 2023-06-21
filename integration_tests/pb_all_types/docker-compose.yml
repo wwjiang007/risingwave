@@ -14,6 +14,7 @@ services:
       - message_queue
     command:
       - topic produce --brokers message_queue:29092 'alltypes' < /data/records.bin
+    container_name: ingestor
 
   risingwave:
     image: ghcr.io/risingwavelabs/risingwave:latest
@@ -24,6 +25,14 @@ services:
       - playground
     container_name: risingwave
 
+  file_server:
+    image: halverneus/static-file-server:latest
+    volumes:
+      - "./:/demo"
+    restart: always
+    environment:
+      FOLDER: /demo
+    container_name: file_server
 volumes:
   message_queue:
     external: false
