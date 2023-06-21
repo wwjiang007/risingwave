@@ -25,5 +25,5 @@ services:
     container_name: risingwave
 
 volumes:
-  redpandadata:
-    driver: local
+  message_queue:
+    external: false
