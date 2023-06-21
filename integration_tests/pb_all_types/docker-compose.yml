@@ -15,6 +15,15 @@ services:
     command:
       - topic produce --brokers message_queue:29092 'alltypes' < /data/records.bin
 
+  risingwave:
+    image: ghcr.io/risingwavelabs/risingwave:latest
+    ports:
+      - 4566:4566
+      - 5691:5691
+    command:
+      - playground
+    container_name: risingwave
+
 volumes:
   redpandadata:
     driver: local
