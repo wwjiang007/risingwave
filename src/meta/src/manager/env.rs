@@ -15,11 +15,11 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use risingwave_common::config::DefaultParallelism;
 use risingwave_meta_model::ClusterId;
 #[cfg(any(test, feature = "test"))]
 use risingwave_meta_storage::MemStore;
 use risingwave_meta_storage::MetaStore;
-use risingwave_common::config::DefaultParallelism;
 use risingwave_pb::meta::SystemParams;
 use risingwave_rpc_client::{StreamClientPool, StreamClientPoolRef};
 

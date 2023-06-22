@@ -27,7 +27,7 @@ use risingwave_hummock_trace::{
     TracedSubResp,
 };
 use risingwave_meta::manager::{MessageStatus, MetaSrvEnv, NotificationManagerRef, WorkerKey};
-use risingwave_meta::storage::{MemStore, MetaStore};
+use risingwave_meta_storage::{MemStore, MetaStore};
 use risingwave_pb::common::WorkerNode;
 use risingwave_pb::meta::subscribe_response::{Info, Operation as RespOperation};
 use risingwave_pb::meta::{SubscribeResponse, SubscribeType};
