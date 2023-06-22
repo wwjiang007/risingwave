@@ -14,14 +14,13 @@ ignored = ["workspace-hack"]
 normal = ["workspace-hack"]
 
 [dependencies]
+etcd-client = { version = "0.2", package = "madsim-etcd-client" }
 itertools = "0.10"
+risingwave_common = { path = "../../common" }
+risingwave_connector = { path = "../../connector" }
 risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
 risingwave_pb = { path = "../../prost" }
-risingwave_connector = { path = "../../connector" }
-risingwave_common = { path = "../../common" }
 risingwave_rpc_client = { path = "../../rpc_client" }
-etcd-client = { version = "0.2", package = "madsim-etcd-client" }
-
 
 [target.'cfg(not(madsim))'.dependencies]
 axum = "0.6"

@@ -23,6 +23,7 @@ use risingwave_hummock_sdk::{
 };
 use risingwave_meta_model::{BTreeMapTransaction, ValTransaction};
 use risingwave_meta_storage::{MetaStore, Transaction};
+use risingwave_meta_types::META_NODE_ID;
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
 use risingwave_pb::hummock::{HummockVersion, ValidationTask};
 
@@ -31,7 +32,6 @@ use crate::hummock::manager::{
     commit_multi_var, read_lock, start_measure_real_process_timer, write_lock,
 };
 use crate::hummock::HummockManager;
-use crate::manager::META_NODE_ID;
 
 impl<S> HummockManager<S>
 where
@@ -137,7 +137,7 @@ where
         for (sst_id, context_id) in sst_to_context {
             #[cfg(test)]
             {
-                if *context_id == crate::manager::META_NODE_ID {
+                if *context_id == META_NODE_ID {
                     continue;
                 }
             }

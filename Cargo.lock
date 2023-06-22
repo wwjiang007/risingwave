@@ -6335,6 +6335,7 @@ dependencies = [
  "risingwave_common_service",
  "risingwave_connector",
  "risingwave_hummock_sdk",
+ "risingwave_meta_manager",
  "risingwave_meta_model",
  "risingwave_meta_storage",
  "risingwave_meta_types",
@@ -6356,6 +6357,40 @@ dependencies = [
  "tower-http",
  "tracing",
  "url",
+ "uuid",
+ "workspace-hack",
+]
+
+[[package]]
+name = "risingwave_meta_manager"
+version = "1.0.0-alpha"
+dependencies = [
+ "anyhow",
+ "assert_matches",
+ "async-trait",
+ "axum",
+ "futures",
+ "itertools",
+ "madsim-tokio",
+ "madsim-tonic",
+ "maplit",
+ "memcomparable",
+ "num-integer",
+ "prost",
+ "rand",
+ "risingwave_common",
+ "risingwave_connector",
+ "risingwave_hummock_sdk",
+ "risingwave_meta_model",
+ "risingwave_meta_storage",
+ "risingwave_meta_types",
+ "risingwave_pb",
+ "risingwave_test_runner",
+ "static_assertions",
+ "tempfile",
+ "thiserror",
+ "tower-http",
+ "tracing",
  "uuid",
  "workspace-hack",
 ]

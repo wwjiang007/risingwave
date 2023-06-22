@@ -20,10 +20,12 @@ async-trait = "0.1"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 itertools = "0.10"
 memcomparable = { version = "0.2" }
+num-integer = "0.1"
 prost = "0.11"
 risingwave_common = { path = "../../common" }
 risingwave_connector = { path = "../../connector" }
 risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
+risingwave_meta_model = { path = "../model" }
 risingwave_meta_storage = { path = "../storage" }
 risingwave_meta_types = { path = "../types" }
 risingwave_pb = { path = "../../prost" }
@@ -37,6 +39,7 @@ tokio = { version = "0.2", package = "madsim-tokio", features = [
     "signal",
 ] }
 tonic = { version = "0.2", package = "madsim-tonic" }
+tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(not(madsim))'.dependencies]
@@ -51,3 +54,6 @@ rand = "0.8"
 risingwave_test_runner = { path = "../../test_runner" }
 static_assertions = "1"
 tempfile = "3"
+
+[features]
+test = []

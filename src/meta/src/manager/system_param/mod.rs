@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod model;
-
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +20,9 @@ use anyhow::anyhow;
 use risingwave_common::system_param::reader::SystemParamsReader;
 use risingwave_common::system_param::{check_missing_params, set_system_param};
 use risingwave_common::{for_all_undeprecated_params, key_of};
-use risingwave_meta_model::{SystemParamsModel, ValTransaction, VarTransaction};
+use risingwave_meta_model::{
+    MetadataModelResult, SystemParamsModel, ValTransaction, VarTransaction,
+};
 use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::SystemParams;
@@ -107,11 +107,8 @@ impl<S: MetaStore> SystemParamsManager<S> {
     }
 
     /// Flush the cached params to meta store.
-    pub async fn flush_params(&self) -> MetaResult<()> {
-        Ok(
-            SystemParams::insert(self.params.read().await.deref(), self.meta_store.as_ref())
-                .await?,
-        )
+    pub async fn flush_params(&self) -> MetadataModelResult<()> {
+        SystemParams::insert(self.params.read().await.deref(), self.meta_store.as_ref()).await
     }
 
     // Periodically sync params to worker nodes.

@@ -22,6 +22,7 @@ use risingwave_hummock_sdk::{
     CompactionGroupId, HummockContextId, HummockEpoch, HummockSstableObjectId, LocalSstableInfo,
 };
 use risingwave_meta_storage::{MemStore, MetaStore};
+use risingwave_meta_types::META_NODE_ID;
 use risingwave_pb::common::{HostAddress, WorkerNode, WorkerType};
 use risingwave_pb::hummock::compact_task::TaskStatus;
 use risingwave_pb::hummock::{
@@ -32,7 +33,7 @@ use risingwave_pb::meta::add_worker_node_request::Property;
 use crate::hummock::compaction::compaction_config::CompactionConfigBuilder;
 use crate::hummock::compaction::default_level_selector;
 use crate::hummock::{CompactorManager, HummockManager, HummockManagerRef};
-use crate::manager::{ClusterManager, ClusterManagerRef, MetaSrvEnv, META_NODE_ID};
+use crate::manager::{ClusterManager, ClusterManagerRef, MetaSrvEnv};
 use crate::rpc::metrics::MetaMetrics;
 
 pub fn to_local_sstable_info(ssts: &[SstableInfo]) -> Vec<LocalSstableInfo> {

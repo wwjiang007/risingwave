@@ -46,6 +46,7 @@ use risingwave_meta_model::{
 };
 use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_meta_types::hummock::CompactStatus;
+use risingwave_meta_types::META_NODE_ID;
 use risingwave_pb::hummock::compact_task::{self, TaskStatus};
 use risingwave_pb::hummock::group_delta::DeltaType;
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
@@ -74,7 +75,7 @@ use crate::hummock::metrics_utils::{
 };
 use crate::hummock::{CompactorManagerRef, TASK_NORMAL};
 use crate::manager::{
-    CatalogManagerRef, ClusterManagerRef, IdCategory, LocalNotification, MetaSrvEnv, META_NODE_ID,
+    CatalogManagerRef, ClusterManagerRef, IdCategory, LocalNotification, MetaSrvEnv,
 };
 use crate::rpc::metrics::MetaMetrics;
 

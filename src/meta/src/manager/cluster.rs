@@ -14,7 +14,6 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -39,25 +38,7 @@ pub type WorkerId = risingwave_meta_model::WorkerId;
 pub type WorkerLocations = HashMap<WorkerId, WorkerNode>;
 pub type ClusterManagerRef<S> = Arc<ClusterManager<S>>;
 
-#[derive(Clone, Debug)]
-pub struct WorkerKey(pub HostAddress);
-
-impl PartialEq<Self> for WorkerKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.eq(&other.0)
-    }
-}
-impl Eq for WorkerKey {}
-
-impl Hash for WorkerKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.host.hash(state);
-        self.0.port.hash(state);
-    }
-}
-
-/// The id preserved for the meta node. Note that there's no such entry in cluster manager.
-pub const META_NODE_ID: u32 = 0;
+pub use risingwave_meta_types::WorkerKey;
 
 /// [`ClusterManager`] manager cluster/worker meta data in [`MetaStore`].
 pub struct ClusterManager<S: MetaStore> {

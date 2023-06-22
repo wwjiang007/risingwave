@@ -31,6 +31,7 @@ risingwave_hummock_sdk = { path = "../hummock_sdk" }
 risingwave_hummock_trace = { path = "../hummock_trace" }
 risingwave_meta = { path = "../../meta", features = ["test"] }
 risingwave_meta_storage = { path = "../../meta/storage" }
+
 risingwave_object_store = { path = "../../object_store" }
 risingwave_pb = { path = "../../prost" }
 risingwave_rpc_client = { path = "../../rpc_client" }
