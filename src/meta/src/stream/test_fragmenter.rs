@@ -18,6 +18,7 @@ use std::vec;
 
 use itertools::Itertools;
 use risingwave_common::catalog::{DatabaseId, SchemaId, TableId};
+use risingwave_meta_model::TableFragments;
 use risingwave_pb::catalog::PbTable;
 use risingwave_pb::common::{
     ParallelUnit, PbColumnOrder, PbDirection, PbNullsAre, PbOrderType, WorkerNode,
@@ -38,7 +39,6 @@ use risingwave_pb::stream_plan::{
 };
 
 use crate::manager::{MetaSrvEnv, StreamingClusterInfo, StreamingJob};
-use crate::model::TableFragments;
 use crate::stream::{
     ActorGraphBuildResult, ActorGraphBuilder, CompleteStreamFragmentGraph, StreamFragmentGraph,
 };

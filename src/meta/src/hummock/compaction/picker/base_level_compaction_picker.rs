@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockLevelsExt;
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{CompactionConfig, InputLevel, Level, LevelType, OverlappingLevel};
 
@@ -23,7 +24,6 @@ use super::min_overlap_compaction_picker::NonOverlapSubLevelPicker;
 use super::{CompactionInput, CompactionPicker, LocalPickerStatistic};
 use crate::hummock::compaction::create_overlap_strategy;
 use crate::hummock::compaction::picker::MinOverlappingPicker;
-use crate::hummock::level_handler::LevelHandler;
 
 pub struct LevelCompactionPicker {
     target_level: usize,

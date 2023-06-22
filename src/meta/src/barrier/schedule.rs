@@ -20,6 +20,7 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 use risingwave_common::catalog::TableId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::hummock::HummockSnapshot;
 use tokio::sync::{oneshot, watch, RwLock};
 
@@ -27,7 +28,6 @@ use super::notifier::Notifier;
 use super::{Command, Scheduled};
 use crate::hummock::HummockManagerRef;
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 /// A queue for scheduling barriers.

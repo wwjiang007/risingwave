@@ -19,6 +19,8 @@ use std::sync::Arc;
 use itertools::Itertools;
 use risingwave_common::catalog::TableId;
 use risingwave_common::util::epoch::Epoch;
+use risingwave_meta_model::ActorId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::ddl_service::DdlProgress;
 use risingwave_pb::hummock::HummockVersionStats;
 use risingwave_pb::stream_service::barrier_complete_response::CreateMviewProgress;
@@ -26,8 +28,6 @@ use risingwave_pb::stream_service::barrier_complete_response::CreateMviewProgres
 use super::command::CommandContext;
 use super::notifier::Notifier;
 use crate::barrier::Command;
-use crate::model::ActorId;
-use crate::storage::MetaStore;
 
 type CreateMviewEpoch = Epoch;
 type ConsumedRows = u64;

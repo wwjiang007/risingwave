@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 
 use futures::future::try_join_all;
 use itertools::Itertools;
+use risingwave_meta_model::MigrationPlan;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::ActorInfo;
 use risingwave_pb::stream_plan::barrier::Mutation;
 use risingwave_pb::stream_plan::AddMutation;
@@ -34,8 +36,6 @@ use crate::barrier::command::CommandContext;
 use crate::barrier::info::BarrierActorInfo;
 use crate::barrier::{CheckpointControl, Command, GlobalBarrierManager};
 use crate::manager::WorkerId;
-use crate::model::MigrationPlan;
-use crate::storage::MetaStore;
 use crate::stream::build_actor_connector_splits;
 use crate::MetaResult;
 

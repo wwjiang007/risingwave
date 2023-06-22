@@ -13,19 +13,20 @@
 // limitations under the License.
 
 use prost::Message;
-use risingwave_hummock_sdk::HummockCompactionTaskId;
-use risingwave_pb::hummock::CompactTaskAssignment;
+use risingwave_hummock_sdk::HummockVersionId;
+use risingwave_pb::hummock::HummockVersionStats;
 
-use crate::hummock::model::HUMMOCK_COMPACT_TASK_ASSIGNMENT;
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_VERSION_STATS_CF_NAME;
+use crate::{MetadataModel, MetadataModelResult};
 
-/// `AssignedCompactTasks` tracks compact tasks assigned to context id.
-impl MetadataModel for CompactTaskAssignment {
-    type KeyType = HummockCompactionTaskId;
-    type PbType = CompactTaskAssignment;
+/// `HummockVersionStats` stores stats for hummock version.
+/// Currently it only persists one row for latest version.
+impl MetadataModel for HummockVersionStats {
+    type KeyType = HummockVersionId;
+    type PbType = HummockVersionStats;
 
     fn cf_name() -> String {
-        HUMMOCK_COMPACT_TASK_ASSIGNMENT.to_string()
+        String::from(HUMMOCK_VERSION_STATS_CF_NAME)
     }
 
     fn to_protobuf(&self) -> Self::PbType {
@@ -41,6 +42,6 @@ impl MetadataModel for CompactTaskAssignment {
     }
 
     fn key(&self) -> MetadataModelResult<Self::KeyType> {
-        Ok(self.compact_task.as_ref().unwrap().task_id)
+        Ok(0)
     }
 }

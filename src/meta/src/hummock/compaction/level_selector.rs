@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 //  Copyright 2023 RisingWave Labs
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,15 @@ use std::collections::HashMap;
 // This source code is licensed under both the GPLv2 (found in the
 // COPYING file in the root directory) and Apache 2.0 License
 // (found in the LICENSE.Apache file in the root directory).
+
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use risingwave_common::catalog::TableOption;
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockLevelsExt;
 use risingwave_hummock_sdk::HummockCompactionTaskId;
+use risingwave_meta_model::hummock::CompactionGroup;
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{compact_task, CompactionConfig, LevelType};
 
@@ -38,8 +41,6 @@ use crate::hummock::compaction::picker::{
     CompactionPicker, LocalPickerStatistic, MinOverlappingPicker,
 };
 use crate::hummock::compaction::{create_overlap_strategy, CompactionTask, LocalSelectorStatistic};
-use crate::hummock::level_handler::LevelHandler;
-use crate::hummock::model::CompactionGroup;
 use crate::rpc::metrics::MetaMetrics;
 
 pub const SCORE_BASE: u64 = 100;

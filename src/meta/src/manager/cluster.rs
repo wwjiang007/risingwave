@@ -19,6 +19,8 @@ use std::time::{Duration, SystemTime};
 
 use itertools::Itertools;
 use risingwave_common::hash::ParallelUnitId;
+use risingwave_meta_model::{MetadataModel, Worker, INVALID_EXPIRE_AT};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::worker_node::{Property, State};
 use risingwave_pb::common::{HostAddress, ParallelUnit, WorkerNode, WorkerType};
 use risingwave_pb::meta::add_worker_node_request::Property as RegisterProperty;
@@ -29,11 +31,9 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio::task::JoinHandle;
 
 use crate::manager::{IdCategory, LocalNotification, MetaSrvEnv};
-use crate::model::{MetadataModel, Worker, INVALID_EXPIRE_AT};
-use crate::storage::MetaStore;
 use crate::{MetaError, MetaResult};
 
-pub type WorkerId = u32;
+pub type WorkerId = risingwave_meta_model::WorkerId;
 pub type WorkerLocations = HashMap<WorkerId, WorkerNode>;
 pub type ClusterManagerRef<S> = Arc<ClusterManager<S>>;
 
@@ -552,8 +552,9 @@ impl ClusterManagerCore {
 
 #[cfg(test)]
 mod tests {
+    use risingwave_meta_storage::MemStore;
+
     use super::*;
-    use crate::storage::MemStore;
 
     #[tokio::test]
     async fn test_cluster_manager() -> MetaResult<()> {

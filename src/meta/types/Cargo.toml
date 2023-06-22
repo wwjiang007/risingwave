@@ -1,0 +1,32 @@
+[package]
+name = "risingwave_meta_types"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["workspace-hack"]
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["workspace-hack"]
+
+[dependencies]
+itertools = "0.10"
+risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
+risingwave_pb = { path = "../../prost" }
+
+[target.'cfg(not(madsim))'.dependencies]
+axum = "0.6"
+tower-http = { version = "0.3", features = ["add-extension", "cors", "fs"] }
+workspace-hack = { path = "../../workspace-hack" }
+
+[dev-dependencies]
+assert_matches = "1"
+maplit = "1.0.2"
+rand = "0.8"
+risingwave_test_runner = { path = "../../test_runner" }
+static_assertions = "1"
+tempfile = "3"

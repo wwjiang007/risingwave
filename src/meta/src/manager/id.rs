@@ -17,11 +17,11 @@ use std::sync::Arc;
 
 use risingwave_common::catalog::{NON_RESERVED_PG_CATALOG_TABLE_ID, NON_RESERVED_USER_ID};
 use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
+use risingwave_meta_model::MetadataModelResult;
+use risingwave_meta_storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 use tokio::sync::RwLock;
 
 use crate::manager::cluster::META_NODE_ID;
-use crate::model::MetadataModelResult;
-use crate::storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 
 pub const ID_PREALLOCATE_INTERVAL: u64 = 1000;
 
@@ -269,9 +269,9 @@ mod tests {
     use std::sync::Arc;
 
     use futures::future;
+    use risingwave_meta_storage::MemStore;
 
     use super::*;
-    use crate::storage::MemStore;
 
     #[tokio::test]
     async fn test_id_generator() -> MetadataModelResult<()> {

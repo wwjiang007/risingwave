@@ -15,13 +15,13 @@
 use std::backtrace::Backtrace;
 use std::sync::Arc;
 
+use risingwave_meta_model::MetadataModelError;
+use risingwave_meta_storage::MetaStoreError;
 use risingwave_pb::PbFieldNotFound;
 use risingwave_rpc_client::error::RpcError;
 
 use crate::hummock::error::Error as HummockError;
 use crate::manager::WorkerId;
-use crate::model::MetadataModelError;
-use crate::storage::MetaStoreError;
 
 pub type MetaResult<T> = std::result::Result<T, MetaError>;
 

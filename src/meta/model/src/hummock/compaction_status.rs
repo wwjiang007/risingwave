@@ -12,31 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use risingwave_pb::user::UserInfo;
+use risingwave_hummock_sdk::CompactionGroupId;
+pub use risingwave_meta_types::hummock::CompactStatus;
 
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_COMPACTION_STATUS_CF_NAME;
+use crate::{MetadataModel, MetadataModelResult};
 
-/// Column family name for user info.
-const USER_INFO_CF_NAME: &str = "cf/user_info";
-
-/// `UserInfo` stores the user information.
-impl MetadataModel for UserInfo {
-    type KeyType = u32;
-    type PbType = UserInfo;
+impl MetadataModel for CompactStatus {
+    type KeyType = CompactionGroupId;
+    type PbType = risingwave_pb::hummock::CompactStatus;
 
     fn cf_name() -> String {
-        USER_INFO_CF_NAME.to_string()
+        String::from(HUMMOCK_COMPACTION_STATUS_CF_NAME)
     }
 
     fn to_protobuf(&self) -> Self::PbType {
-        self.clone()
+        self.into()
     }
 
     fn from_protobuf(prost: Self::PbType) -> Self {
-        prost
+        (&prost).into()
     }
 
     fn key(&self) -> MetadataModelResult<Self::KeyType> {
-        Ok(self.id)
+        Ok(self.compaction_group_id)
     }
 }

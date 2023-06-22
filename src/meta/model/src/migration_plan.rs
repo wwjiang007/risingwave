@@ -15,10 +15,11 @@
 use std::collections::HashMap;
 
 use prost::Message;
+use risingwave_meta_storage::{
+    MetaStore, MetaStoreError, MetaStoreResult, Snapshot, DEFAULT_COLUMN_FAMILY,
+};
 use risingwave_pb::common::ParallelUnit;
 use risingwave_pb::meta::PbMigrationPlan;
-
-use crate::storage::{MetaStore, MetaStoreError, MetaStoreResult, Snapshot, DEFAULT_COLUMN_FAMILY};
 
 /// `migration_plan` in bytes.
 pub const MIGRATION_PLAN_KEY: &[u8] = &[

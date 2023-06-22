@@ -17,10 +17,11 @@ use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use risingwave_backup::error::{BackupError, BackupResult};
 use risingwave_backup::meta_snapshot::{ClusterMetadata, MetaSnapshot};
 use risingwave_backup::MetaSnapshotId;
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockVersionUpdateExt;
+use risingwave_meta_model::{ClusterId, MetadataModel, SystemParamsModel};
+use risingwave_meta_storage::{MetaStore, Snapshot, DEFAULT_COLUMN_FAMILY};
 use risingwave_pb::catalog::{
     Connection, Database, Function, Index, Schema, Sink, Source, Table, View,
 };
@@ -28,9 +29,7 @@ use risingwave_pb::hummock::{HummockVersion, HummockVersionDelta, HummockVersion
 use risingwave_pb::meta::SystemParams;
 use risingwave_pb::user::UserInfo;
 
-use crate::manager::model::SystemParamsModel;
-use crate::model::{ClusterId, MetadataModel};
-use crate::storage::{MetaStore, Snapshot, DEFAULT_COLUMN_FAMILY};
+use crate::backup_restore::error::{BackupError, BackupResult};
 
 const VERSION: u32 = 1;
 
@@ -89,13 +88,15 @@ impl<S: MetaStore> MetaSnapshotBuilder<S> {
             .next()
             .ok_or_else(|| anyhow!("hummock version stats not found in meta store"))?;
         let compaction_groups =
-            crate::hummock::model::CompactionGroup::list_at_snapshot::<S>(&meta_store_snapshot)
-                .await?
-                .iter()
-                .map(MetadataModel::to_protobuf)
-                .collect();
+            risingwave_meta_model::hummock::CompactionGroup::list_at_snapshot::<S>(
+                &meta_store_snapshot,
+            )
+            .await?
+            .iter()
+            .map(MetadataModel::to_protobuf)
+            .collect();
         let table_fragments =
-            crate::model::TableFragments::list_at_snapshot::<S>(&meta_store_snapshot)
+            risingwave_meta_model::TableFragments::list_at_snapshot::<S>(&meta_store_snapshot)
                 .await?
                 .iter()
                 .map(MetadataModel::to_protobuf)
@@ -166,16 +167,15 @@ mod tests {
 
     use assert_matches::assert_matches;
     use itertools::Itertools;
-    use risingwave_backup::error::BackupError;
     use risingwave_backup::meta_snapshot::MetaSnapshot;
     use risingwave_common::error::ToErrorStr;
     use risingwave_common::system_param::system_params_for_test;
+    use risingwave_meta_model::{ClusterId, MetadataModel, SystemParamsModel};
+    use risingwave_meta_storage::{MemStore, MetaStore, DEFAULT_COLUMN_FAMILY};
     use risingwave_pb::hummock::{HummockVersion, HummockVersionStats};
 
+    use crate::backup_restore::error::BackupError;
     use crate::backup_restore::meta_snapshot_builder::MetaSnapshotBuilder;
-    use crate::manager::model::SystemParamsModel;
-    use crate::model::{ClusterId, MetadataModel};
-    use crate::storage::{MemStore, MetaStore, DEFAULT_COLUMN_FAMILY};
 
     #[tokio::test]
     async fn test_snapshot_builder() {

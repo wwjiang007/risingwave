@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::storage::{ColumnFamily, Key, Value};
+use crate::{ColumnFamily, Key, Value};
 
 /// A `Transaction` executes several writes(aka. operations) to meta store atomically with optional
 /// preconditions checked. It executes as follow:
@@ -81,7 +81,7 @@ impl Transaction {
         (self.preconditions, self.operations)
     }
 
-    #[cfg(test)]
+    /// Only for tests
     pub fn get_operations(&self) -> &Vec<Operation> {
         &self.operations
     }

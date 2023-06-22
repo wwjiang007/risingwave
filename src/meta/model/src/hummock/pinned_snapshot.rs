@@ -13,19 +13,19 @@
 // limitations under the License.
 
 use prost::Message;
-use risingwave_hummock_sdk::HummockVersionId;
-use risingwave_pb::hummock::HummockVersionDelta;
+use risingwave_hummock_sdk::HummockContextId;
+use risingwave_pb::hummock::HummockPinnedSnapshot;
 
-use crate::hummock::model::HUMMOCK_VERSION_DELTA_CF_NAME;
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_PINNED_SNAPSHOT_CF_NAME;
+use crate::{MetadataModel, MetadataModelResult};
 
-/// `HummockVersionDelta` tracks delta of `Sstables` in given version based on previous version.
-impl MetadataModel for HummockVersionDelta {
-    type KeyType = HummockVersionId;
-    type PbType = HummockVersionDelta;
+/// `HummockPinnedSnapshot` tracks pinned snapshots by given context id.
+impl MetadataModel for HummockPinnedSnapshot {
+    type KeyType = HummockContextId;
+    type PbType = HummockPinnedSnapshot;
 
     fn cf_name() -> String {
-        String::from(HUMMOCK_VERSION_DELTA_CF_NAME)
+        String::from(HUMMOCK_PINNED_SNAPSHOT_CF_NAME)
     }
 
     fn to_protobuf(&self) -> Self::PbType {
@@ -41,6 +41,6 @@ impl MetadataModel for HummockVersionDelta {
     }
 
     fn key(&self) -> MetadataModelResult<Self::KeyType> {
-        Ok(self.id)
+        Ok(self.context_id)
     }
 }

@@ -15,12 +15,11 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use risingwave_meta_model::ClusterId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::telemetry_info_service_server::TelemetryInfoService;
 use risingwave_pb::meta::{GetTelemetryInfoRequest, TelemetryInfoResponse};
 use tonic::{Request, Response, Status};
-
-use crate::model::ClusterId;
-use crate::storage::MetaStore;
 
 pub struct TelemetryInfoServiceImpl<S: MetaStore> {
     meta_store: Arc<S>,

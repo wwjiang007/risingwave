@@ -14,11 +14,11 @@
 
 use std::sync::Arc;
 
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{CompactionConfig, InputLevel, LevelType, OverlappingLevel};
 
 use super::{CompactionInput, CompactionPicker, LocalPickerStatistic};
-use crate::hummock::level_handler::LevelHandler;
 
 pub struct TierCompactionPicker {
     config: Arc<CompactionConfig>,
@@ -141,6 +141,7 @@ pub mod tests {
     use std::sync::Arc;
 
     use risingwave_hummock_sdk::compaction_group::hummock_version_ext::new_sub_level;
+    use risingwave_meta_types::hummock::LevelHandler;
     use risingwave_pb::hummock::hummock_version::Levels;
     use risingwave_pb::hummock::{LevelType, OverlappingLevel};
 
@@ -151,7 +152,6 @@ pub mod tests {
     use crate::hummock::compaction::picker::{
         CompactionPicker, LocalPickerStatistic, TierCompactionPicker,
     };
-    use crate::hummock::level_handler::LevelHandler;
 
     #[test]
     fn test_pick_whole_level_basic() {

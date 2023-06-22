@@ -15,9 +15,8 @@
 use std::collections::HashMap;
 
 use risingwave_common::catalog::TableVersionId;
+use risingwave_meta_model::FragmentId;
 use risingwave_pb::catalog::{Index, Sink, Source, Table};
-
-use crate::model::FragmentId;
 
 // This enum is used in order to re-use code in `DdlServiceImpl` for creating MaterializedView and
 // Sink.

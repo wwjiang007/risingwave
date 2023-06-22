@@ -22,15 +22,14 @@ use risingwave_pb::common::{ParallelUnit, ParallelUnitMapping};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
 use risingwave_pb::meta::table_fragments::{ActorStatus, Fragment, State};
 use risingwave_pb::meta::PbTableFragments;
+use risingwave_pb::source::{ConnectorSplit, ConnectorSplits};
 use risingwave_pb::stream_plan::stream_node::NodeBody;
 use risingwave_pb::stream_plan::{
     FragmentTypeFlag, PbStreamEnvironment, StreamActor, StreamNode, StreamSource,
 };
 
 use super::{ActorId, FragmentId};
-use crate::manager::{SourceId, WorkerId};
-use crate::model::{MetadataModel, MetadataModelResult};
-use crate::stream::{build_actor_connector_splits, build_actor_split_impls, SplitAssignment};
+use crate::{MetadataModel, MetadataModelResult, SourceId, WorkerId};
 
 /// Column family name for table fragments.
 const TABLE_FRAGMENTS_CF_NAME: &str = "cf/table_fragments";
@@ -48,16 +47,16 @@ pub struct TableFragments {
     state: State,
 
     /// The table fragments.
-    pub(crate) fragments: BTreeMap<FragmentId, Fragment>,
+    pub fragments: BTreeMap<FragmentId, Fragment>,
 
     /// The status of actors
-    pub(crate) actor_status: BTreeMap<ActorId, ActorStatus>,
+    pub actor_status: BTreeMap<ActorId, ActorStatus>,
 
     /// The splits of actors
-    pub(crate) actor_splits: HashMap<ActorId, Vec<SplitImpl>>,
+    pub actor_splits: HashMap<ActorId, Vec<SplitImpl>>,
 
     /// The environment associated with this stream plan and its fragments
-    pub(crate) env: StreamEnvironment,
+    pub env: StreamEnvironment,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -470,3 +469,38 @@ impl TableFragments {
             .flat_map(|f| f.state_table_ids.clone())
     }
 }
+
+pub fn build_actor_connector_splits(
+    splits: &HashMap<ActorId, Vec<SplitImpl>>,
+) -> HashMap<u32, ConnectorSplits> {
+    splits
+        .iter()
+        .map(|(&actor_id, splits)| {
+            (
+                actor_id,
+                ConnectorSplits {
+                    splits: splits.iter().map(ConnectorSplit::from).collect(),
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn build_actor_split_impls(
+    actor_splits: &HashMap<u32, ConnectorSplits>,
+) -> HashMap<ActorId, Vec<SplitImpl>> {
+    actor_splits
+        .iter()
+        .map(|(actor_id, ConnectorSplits { splits })| {
+            (
+                *actor_id,
+                splits
+                    .iter()
+                    .map(|split| SplitImpl::try_from(split).unwrap())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+pub type SplitAssignment = HashMap<FragmentId, HashMap<ActorId, Vec<SplitImpl>>>;

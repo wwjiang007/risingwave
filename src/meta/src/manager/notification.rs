@@ -17,6 +17,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use risingwave_common::system_param::reader::SystemParamsReader;
+use risingwave_meta_model::{FragmentId, NotificationVersion as Version};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::{WorkerNode, WorkerType};
 use risingwave_pb::hummock::CompactTask;
 use risingwave_pb::meta::relation::RelationInfo;
@@ -29,8 +31,6 @@ use tokio::sync::Mutex;
 use tonic::Status;
 
 use crate::manager::cluster::WorkerKey;
-use crate::model::{FragmentId, NotificationVersion as Version};
-use crate::storage::MetaStore;
 
 pub type MessageStatus = Status;
 pub type Notification = Result<SubscribeResponse, Status>;
@@ -392,10 +392,10 @@ impl NotificationManagerCore {
 
 #[cfg(test)]
 mod tests {
+    use risingwave_meta_storage::MemStore;
     use risingwave_pb::common::HostAddress;
 
     use super::*;
-    use crate::storage::MemStore;
 
     #[tokio::test]
     async fn test_multiple_subscribers_one_worker() {

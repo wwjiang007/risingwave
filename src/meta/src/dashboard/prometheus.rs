@@ -18,11 +18,11 @@ use std::time::SystemTime;
 use anyhow::anyhow;
 use axum::{Extension, Json};
 use prometheus_http_query::response::{RangeVector, Sample};
+use risingwave_meta_storage::MetaStore;
 use serde::Serialize;
 
 use super::handlers::{err, DashboardError};
 use super::Service;
-use crate::storage::MetaStore;
 
 #[derive(Serialize, Debug)]
 pub struct PrometheusSample {

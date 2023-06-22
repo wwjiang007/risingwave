@@ -26,6 +26,7 @@ use risingwave_hummock_sdk::{
     HummockContextId, HummockEpoch, HummockSstableObjectId, HummockVersionId, LocalSstableInfo,
     SstObjectIdRange,
 };
+use risingwave_meta_storage::MemStore;
 use risingwave_pb::common::{HostAddress, WorkerType};
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
 use risingwave_pb::hummock::{
@@ -42,7 +43,6 @@ use crate::hummock::compaction::{
 };
 use crate::hummock::compaction_scheduler::CompactionRequestChannel;
 use crate::hummock::HummockManager;
-use crate::storage::MemStore;
 
 pub struct MockHummockMetaClient {
     hummock_manager: Arc<HummockManager<MemStore>>,

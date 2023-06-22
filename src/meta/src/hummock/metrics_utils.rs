@@ -25,6 +25,7 @@ use risingwave_hummock_sdk::compaction_group::hummock_version_ext::{
 use risingwave_hummock_sdk::{
     CompactionGroupId, HummockContextId, HummockEpoch, HummockSstableObjectId, HummockVersionId,
 };
+use risingwave_meta_types::hummock::CompactStatus;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::write_limits::WriteLimit;
 use risingwave_pb::hummock::{
@@ -33,7 +34,6 @@ use risingwave_pb::hummock::{
 };
 
 use super::compaction::{get_compression_algorithm, DynamicLevelSelectorCore};
-use crate::hummock::compaction::CompactStatus;
 use crate::rpc::metrics::MetaMetrics;
 
 pub fn trigger_version_stat(

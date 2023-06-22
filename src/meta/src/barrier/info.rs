@@ -14,10 +14,10 @@
 
 use std::collections::HashMap;
 
+use risingwave_meta_model::ActorId;
 use risingwave_pb::common::WorkerNode;
 
 use crate::manager::{ActorInfos, WorkerId};
-use crate::model::ActorId;
 
 /// [`BarrierActorInfo`] resolves the actor info read from meta store for
 /// [`crate::barrier::GlobalBarrierManager`].

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use async_trait::async_trait;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::system_params_service_server::SystemParamsService;
 use risingwave_pb::meta::{
     GetSystemParamsRequest, GetSystemParamsResponse, SetSystemParamRequest, SetSystemParamResponse,
@@ -20,7 +21,6 @@ use risingwave_pb::meta::{
 use tonic::{Request, Response, Status};
 
 use crate::manager::SystemParamsManagerRef;
-use crate::storage::MetaStore;
 
 pub struct SystemParamsServiceImpl<S>
 where

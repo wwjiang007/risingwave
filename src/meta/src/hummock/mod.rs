@@ -19,11 +19,9 @@ pub mod error;
 mod manager;
 pub use manager::*;
 
-mod level_handler;
 mod metrics_utils;
 #[cfg(any(test, feature = "test"))]
 pub mod mock_hummock_meta_client;
-pub mod model;
 #[cfg(any(test, feature = "test"))]
 pub mod test_utils;
 mod utils;
@@ -35,6 +33,7 @@ pub use compaction_scheduler::CompactionScheduler;
 pub use compactor_manager::*;
 #[cfg(any(test, feature = "test"))]
 pub use mock_hummock_meta_client::MockHummockMetaClient;
+use risingwave_meta_storage::MetaStore;
 use sync_point::sync_point;
 use tokio::sync::oneshot::Sender;
 use tokio::task::JoinHandle;
@@ -43,7 +42,6 @@ pub use vacuum::*;
 pub use crate::hummock::compaction_scheduler::{
     CompactionRequestChannelRef, CompactionSchedulerRef,
 };
-use crate::storage::MetaStore;
 use crate::MetaOpts;
 
 /// Start hummock's asynchronous tasks.

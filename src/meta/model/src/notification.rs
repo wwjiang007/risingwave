@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
+use risingwave_meta_storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 
 /// `NotificationVersion` records the last sent notification version, this will be stored
 /// persistently to meta store.

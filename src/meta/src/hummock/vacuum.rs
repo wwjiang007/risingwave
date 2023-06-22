@@ -20,6 +20,7 @@ use std::time::Duration;
 use futures::{stream, StreamExt};
 use itertools::Itertools;
 use risingwave_hummock_sdk::HummockSstableObjectId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
@@ -30,7 +31,6 @@ use crate::backup_restore::BackupManagerRef;
 use crate::hummock::error::{Error, Result};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{ClusterManagerRef, MetaSrvEnv};
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub type VacuumManagerRef<S> = Arc<VacuumManager<S>>;

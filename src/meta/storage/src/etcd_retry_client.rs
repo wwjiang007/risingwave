@@ -20,7 +20,7 @@ use etcd_client::{
 };
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 
-use crate::storage::WrappedEtcdClient;
+use crate::WrappedEtcdClient;
 
 type Result<T> = std::result::Result<T, Error>;
 

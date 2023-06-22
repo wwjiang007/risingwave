@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockLevelsExt;
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{InputLevel, Level, LevelType, OverlappingLevel, SstableInfo};
 
@@ -25,7 +26,6 @@ use crate::hummock::compaction::overlap_strategy::{
     OverlapInfo, OverlapStrategy, RangeOverlapInfo,
 };
 use crate::hummock::compaction::ManualCompactionOption;
-use crate::hummock::level_handler::LevelHandler;
 
 pub struct ManualCompactionPicker {
     overlap_strategy: Arc<dyn OverlapStrategy>,
@@ -323,6 +323,7 @@ impl CompactionPicker for ManualCompactionPicker {
 pub mod tests {
     use std::collections::{HashMap, HashSet};
 
+    use risingwave_meta_model::hummock::CompactionGroup;
     use risingwave_pb::hummock::compact_task;
     pub use risingwave_pb::hummock::{KeyRange, Level, LevelType};
 
@@ -335,7 +336,6 @@ pub mod tests {
     use crate::hummock::compaction::level_selector::{LevelSelector, ManualCompactionSelector};
     use crate::hummock::compaction::overlap_strategy::RangeOverlapStrategy;
     use crate::hummock::compaction::LocalSelectorStatistic;
-    use crate::hummock::model::CompactionGroup;
     use crate::hummock::test_utils::iterator_test_key_of_epoch;
 
     fn clean_task_state(level_handler: &mut LevelHandler) {

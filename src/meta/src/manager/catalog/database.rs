@@ -17,14 +17,14 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use itertools::Itertools;
 use risingwave_common::catalog::TableOption;
+use risingwave_meta_model::MetadataModel;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::catalog::{
     Connection, Database, Function, Index, Schema, Sink, Source, Table, View,
 };
 
 use super::{ConnectionId, DatabaseId, FunctionId, RelationId, SchemaId, SinkId, SourceId, ViewId};
 use crate::manager::{IndexId, MetaSrvEnv, TableId};
-use crate::model::MetadataModel;
-use crate::storage::MetaStore;
 use crate::{MetaError, MetaResult};
 
 pub type Catalog = (

@@ -36,7 +36,7 @@ pub(crate) mod tests {
         unregister_table_ids_from_compaction_group,
     };
     use risingwave_meta::hummock::{HummockManagerRef, MockHummockMetaClient};
-    use risingwave_meta::storage::MetaStore;
+    use risingwave_meta_storage::MetaStore;
     use risingwave_pb::hummock::{HummockVersion, TableOption};
     use risingwave_rpc_client::HummockMetaClient;
     use risingwave_storage::filter_key_extractor::{

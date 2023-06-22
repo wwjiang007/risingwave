@@ -17,12 +17,12 @@ use std::sync::Arc;
 
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockLevelsExt;
 use risingwave_hummock_sdk::prost_key_range::KeyRangeExt;
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{InputLevel, Level, LevelType, SstableInfo};
 
 use super::{CompactionInput, CompactionPicker, LocalPickerStatistic};
 use crate::hummock::compaction::overlap_strategy::OverlapStrategy;
-use crate::hummock::level_handler::LevelHandler;
 
 pub struct MinOverlappingPicker {
     level: usize,

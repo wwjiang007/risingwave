@@ -12,6 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::derive_partial_eq_without_eq)]
+#![feature(trait_alias)]
+#![feature(binary_heap_drain_sorted)]
+#![feature(type_alias_impl_trait)]
+#![feature(drain_filter)]
+#![feature(custom_test_frameworks)]
+#![feature(lint_reasons)]
+#![feature(map_try_insert)]
+#![feature(hash_drain_filter)]
+#![feature(btree_drain_filter)]
+#![feature(result_option_inspect)]
+#![feature(lazy_cell)]
+#![feature(let_chains)]
+#![feature(error_generic_member_access)]
+#![feature(provide_any)]
+#![feature(assert_matches)]
+#![feature(try_blocks)]
+#![cfg_attr(coverage, feature(no_coverage))]
+#![test_runner(risingwave_test_runner::test_runner::run_failpont_tests)]
+#![feature(is_sorted)]
+#![feature(string_leak)]
+#![feature(impl_trait_in_assoc_type)]
+
 mod etcd_meta_store;
 mod etcd_retry_client;
 mod mem_meta_store;

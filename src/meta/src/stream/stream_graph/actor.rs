@@ -22,6 +22,8 @@ use risingwave_common::bail;
 use risingwave_common::buffer::Bitmap;
 use risingwave_common::hash::{ActorId, ActorMapping, ParallelUnitId};
 use risingwave_common::util::iter_util::ZipEqFast;
+use risingwave_meta_model::{DispatcherId, FragmentId};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::table_fragments::Fragment;
 use risingwave_pb::stream_plan::stream_node::NodeBody;
 use risingwave_pb::stream_plan::update_mutation::MergeUpdate;
@@ -32,8 +34,6 @@ use risingwave_pb::stream_plan::{
 use super::id::GlobalFragmentIdsExt;
 use super::Locations;
 use crate::manager::{IdGeneratorManagerRef, StreamingClusterInfo, StreamingJob};
-use crate::model::{DispatcherId, FragmentId};
-use crate::storage::MetaStore;
 use crate::stream::stream_graph::fragment::{
     CompleteStreamFragmentGraph, EdgeId, EitherFragment, StreamFragmentEdge,
 };

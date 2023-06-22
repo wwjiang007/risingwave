@@ -14,6 +14,8 @@
 
 use itertools::Itertools;
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
+use risingwave_meta_model::{StreamEnvironment, TableFragments};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::catalog::{Connection, Database, Function, Schema, Source, Table, View};
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
 use risingwave_pb::ddl_service::DdlProgress;
@@ -25,8 +27,6 @@ use crate::manager::{
     IdCategory, IndexId, MetaSrvEnv, NotificationVersion, SchemaId, SinkId, SourceId, StreamingJob,
     TableId, ViewId,
 };
-use crate::model::{StreamEnvironment, TableFragments};
-use crate::storage::MetaStore;
 use crate::stream::{
     validate_sink, ActorGraphBuildResult, ActorGraphBuilder, CompleteStreamFragmentGraph,
     CreateStreamingJobContext, GlobalStreamManagerRef, ReplaceTableContext, SourceManagerRef,

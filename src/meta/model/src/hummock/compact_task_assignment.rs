@@ -13,19 +13,19 @@
 // limitations under the License.
 
 use prost::Message;
-use risingwave_hummock_sdk::HummockContextId;
-use risingwave_pb::hummock::HummockPinnedSnapshot;
+use risingwave_hummock_sdk::HummockCompactionTaskId;
+use risingwave_pb::hummock::CompactTaskAssignment;
 
-use crate::hummock::model::HUMMOCK_PINNED_SNAPSHOT_CF_NAME;
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_COMPACT_TASK_ASSIGNMENT;
+use crate::{MetadataModel, MetadataModelResult};
 
-/// `HummockPinnedSnapshot` tracks pinned snapshots by given context id.
-impl MetadataModel for HummockPinnedSnapshot {
-    type KeyType = HummockContextId;
-    type PbType = HummockPinnedSnapshot;
+/// `AssignedCompactTasks` tracks compact tasks assigned to context id.
+impl MetadataModel for CompactTaskAssignment {
+    type KeyType = HummockCompactionTaskId;
+    type PbType = CompactTaskAssignment;
 
     fn cf_name() -> String {
-        String::from(HUMMOCK_PINNED_SNAPSHOT_CF_NAME)
+        HUMMOCK_COMPACT_TASK_ASSIGNMENT.to_string()
     }
 
     fn to_protobuf(&self) -> Self::PbType {
@@ -41,6 +41,6 @@ impl MetadataModel for HummockPinnedSnapshot {
     }
 
     fn key(&self) -> MetadataModelResult<Self::KeyType> {
-        Ok(self.context_id)
+        Ok(self.compact_task.as_ref().unwrap().task_id)
     }
 }

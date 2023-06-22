@@ -13,10 +13,9 @@
 // limitations under the License.
 
 use anyhow::anyhow;
+use risingwave_meta_storage::MetaStoreError;
 use risingwave_pb::PbFieldNotFound;
 use thiserror::Error;
-
-use crate::storage::MetaStoreError;
 
 pub type MetadataModelResult<T> = std::result::Result<T, MetadataModelError>;
 

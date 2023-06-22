@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use risingwave_common::config::MetaBackend;
 use thiserror::Error;
 
-use crate::storage::transaction::Transaction;
-use crate::storage::{Key, Value};
+use crate::transaction::Transaction;
+use crate::{Key, Value};
 
 pub const DEFAULT_COLUMN_FAMILY: &str = "default";
 
@@ -61,3 +61,9 @@ pub enum MetaStoreError {
 }
 
 pub type MetaStoreResult<T> = std::result::Result<T, MetaStoreError>;
+
+// impl From<MetaStoreError> for BackupError {
+//     fn from(e: MetaStoreError) -> Self {
+//         BackupError::MetaStorage(e.into())
+//     }
+// }

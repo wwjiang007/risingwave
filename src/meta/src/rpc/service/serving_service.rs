@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use itertools::Itertools;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::serving_service_server::ServingService;
 use risingwave_pb::meta::{
     FragmentParallelUnitMapping, GetServingVnodeMappingsRequest, GetServingVnodeMappingsResponse,
@@ -21,7 +22,6 @@ use tonic::{Request, Response, Status};
 
 use crate::manager::FragmentManagerRef;
 use crate::serving::ServingVnodeMappingRef;
-use crate::storage::MetaStore;
 
 pub struct ServingServiceImpl<S: MetaStore> {
     serving_vnode_mapping: ServingVnodeMappingRef,

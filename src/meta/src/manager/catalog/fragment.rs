@@ -23,6 +23,11 @@ use risingwave_common::hash::{ActorMapping, ParallelUnitId, ParallelUnitMapping}
 use risingwave_common::util::stream_graph_visitor::visit_stream_node;
 use risingwave_common::{bail, try_match_expand};
 use risingwave_connector::source::SplitImpl;
+use risingwave_meta_model::{
+    ActorId, BTreeMapTransaction, FragmentId, MetadataModel, MigrationPlan, TableFragments,
+    ValTransaction,
+};
+use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
 use risingwave_pb::meta::table_fragments::{ActorStatus, Fragment, State};
@@ -37,11 +42,6 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 use crate::barrier::Reschedule;
 use crate::manager::cluster::WorkerId;
 use crate::manager::{commit_meta, commit_meta_with_trx, LocalNotification, MetaSrvEnv};
-use crate::model::{
-    ActorId, BTreeMapTransaction, FragmentId, MetadataModel, MigrationPlan, TableFragments,
-    ValTransaction,
-};
-use crate::storage::{MetaStore, Transaction};
 use crate::stream::{SplitAssignment, TableRevision};
 use crate::MetaResult;
 

@@ -14,11 +14,11 @@
 
 use std::collections::HashSet;
 
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{InputLevel, SstableInfo};
 
 use super::CompactionInput;
-use crate::hummock::level_handler::LevelHandler;
 
 // The execution model of SpaceReclaimCompactionPicker scans through the last level of files by
 // key_range and selects the appropriate files to generate compaction
@@ -164,6 +164,7 @@ mod test {
     use std::collections::HashMap;
 
     use itertools::Itertools;
+    use risingwave_meta_model::hummock::CompactionGroup;
     use risingwave_pb::hummock::compact_task;
     pub use risingwave_pb::hummock::{KeyRange, Level, LevelType};
 
@@ -175,7 +176,6 @@ mod test {
     };
     use crate::hummock::compaction::level_selector::SpaceReclaimCompactionSelector;
     use crate::hummock::compaction::{LevelSelector, LocalSelectorStatistic};
-    use crate::hummock::model::CompactionGroup;
 
     #[test]
     fn test_space_reclaim_compaction_selector() {

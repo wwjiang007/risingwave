@@ -13,20 +13,19 @@
 // limitations under the License.
 
 use prost::Message;
-use risingwave_hummock_sdk::HummockVersionId;
-use risingwave_pb::hummock::HummockVersionStats;
+use risingwave_hummock_sdk::HummockContextId;
+use risingwave_pb::hummock::HummockPinnedVersion;
 
-use crate::hummock::model::HUMMOCK_VERSION_STATS_CF_NAME;
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_PINNED_VERSION_CF_NAME;
+use crate::{MetadataModel, MetadataModelResult};
 
-/// `HummockVersionStats` stores stats for hummock version.
-/// Currently it only persists one row for latest version.
-impl MetadataModel for HummockVersionStats {
-    type KeyType = HummockVersionId;
-    type PbType = HummockVersionStats;
+/// `HummockPinnedVersion` tracks pinned versions by given context id.
+impl MetadataModel for HummockPinnedVersion {
+    type KeyType = HummockContextId;
+    type PbType = HummockPinnedVersion;
 
     fn cf_name() -> String {
-        String::from(HUMMOCK_VERSION_STATS_CF_NAME)
+        String::from(HUMMOCK_PINNED_VERSION_CF_NAME)
     }
 
     fn to_protobuf(&self) -> Self::PbType {
@@ -42,6 +41,6 @@ impl MetadataModel for HummockVersionStats {
     }
 
     fn key(&self) -> MetadataModelResult<Self::KeyType> {
-        Ok(0)
+        Ok(self.context_id)
     }
 }

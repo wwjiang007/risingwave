@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use itertools::Itertools;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::user::grant_privilege::Object;
 use risingwave_pb::user::update_user_request::UpdateField;
 use risingwave_pb::user::user_service_server::UserService;
@@ -24,7 +25,6 @@ use risingwave_pb::user::{
 use tonic::{Request, Response, Status};
 
 use crate::manager::{CatalogManagerRef, IdCategory, MetaSrvEnv};
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub struct UserServiceImpl<S: MetaStore> {

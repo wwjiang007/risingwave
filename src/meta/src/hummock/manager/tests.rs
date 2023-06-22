@@ -29,6 +29,8 @@ use risingwave_hummock_sdk::{
     CompactionGroupId, ExtendedSstableInfo, HummockContextId, HummockEpoch, HummockSstableObjectId,
     HummockVersionId, LocalSstableInfo, FIRST_VERSION_ID,
 };
+use risingwave_meta_model::MetadataModel;
+use risingwave_meta_storage::{MemStore, MetaStore};
 use risingwave_pb::common::{HostAddress, WorkerType};
 use risingwave_pb::hummock::compact_task::TaskStatus;
 use risingwave_pb::hummock::version_update_payload::Payload;
@@ -47,8 +49,6 @@ use crate::hummock::{
     start_compaction_scheduler, CompactionScheduler, HummockManager, HummockManagerRef,
 };
 use crate::manager::WorkerId;
-use crate::model::MetadataModel;
-use crate::storage::{MemStore, MetaStore};
 
 fn pin_versions_sum(pin_versions: &[HummockPinnedVersion]) -> usize {
     pin_versions.iter().len()

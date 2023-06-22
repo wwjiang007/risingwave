@@ -25,6 +25,11 @@ use risingwave_hummock_sdk::compaction_group::hummock_version_ext::{
 };
 use risingwave_hummock_sdk::compaction_group::{StateTableId, StaticCompactionGroupId};
 use risingwave_hummock_sdk::CompactionGroupId;
+use risingwave_meta_model::hummock::CompactionGroup;
+use risingwave_meta_model::{
+    BTreeMapEntryTransaction, BTreeMapTransaction, MetadataModel, TableFragments, ValTransaction,
+};
+use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::hummock::group_delta::DeltaType;
 use risingwave_pb::hummock::hummock_version_delta::GroupDeltas;
 use risingwave_pb::hummock::rise_ctl_update_compaction_config_request::mutable_config::MutableConfig;
@@ -41,12 +46,7 @@ use crate::hummock::compaction::compaction_config::{
 use crate::hummock::error::{Error, Result};
 use crate::hummock::manager::{drop_sst, read_lock, HummockManager};
 use crate::hummock::metrics_utils::remove_compaction_group_in_sst_stat;
-use crate::hummock::model::CompactionGroup;
 use crate::manager::{IdCategory, MetaSrvEnv};
-use crate::model::{
-    BTreeMapEntryTransaction, BTreeMapTransaction, MetadataModel, TableFragments, ValTransaction,
-};
-use crate::storage::{MetaStore, Transaction};
 
 impl<S: MetaStore> HummockManager<S> {
     pub(super) async fn build_compaction_group_manager(
@@ -867,12 +867,12 @@ mod tests {
     use itertools::Itertools;
     use risingwave_common::catalog::TableId;
     use risingwave_common::constants::hummock::PROPERTIES_RETENTION_SECOND_KEY;
+    use risingwave_meta_model::TableFragments;
     use risingwave_pb::hummock::rise_ctl_update_compaction_config_request::mutable_config::MutableConfig;
     use risingwave_pb::meta::table_fragments::Fragment;
 
     use crate::hummock::test_utils::setup_compute_env;
     use crate::hummock::HummockManager;
-    use crate::model::TableFragments;
 
     #[tokio::test]
     async fn test_inner() {

@@ -16,13 +16,13 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::anyhow;
+use risingwave_meta_model::MetadataModel;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::user::UserInfo;
 
 use super::database::DatabaseManager;
 use super::UserId;
 use crate::manager::MetaSrvEnv;
-use crate::model::MetadataModel;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub struct UserManager {
@@ -129,13 +129,13 @@ impl UserManager {
 #[cfg(test)]
 mod tests {
     use risingwave_common::catalog::{DEFAULT_SUPER_USER, DEFAULT_SUPER_USER_ID};
+    use risingwave_meta_model::{BTreeMapTransaction, ValTransaction};
+    use risingwave_meta_storage::{MemStore, Transaction};
     use risingwave_pb::user::grant_privilege::{Action, ActionWithGrantOption, Object};
     use risingwave_pb::user::GrantPrivilege;
 
     use super::*;
     use crate::manager::{commit_meta, CatalogManager};
-    use crate::model::{BTreeMapTransaction, ValTransaction};
-    use crate::storage::{MemStore, Transaction};
 
     fn make_test_user(id: u32, name: &str) -> UserInfo {
         UserInfo {

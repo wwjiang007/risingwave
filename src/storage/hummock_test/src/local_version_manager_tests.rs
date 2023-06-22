@@ -23,7 +23,7 @@ use risingwave_meta::hummock::test_utils::{
 };
 use risingwave_meta::hummock::{HummockManagerRef, MockHummockMetaClient};
 use risingwave_meta::manager::MetaSrvEnv;
-use risingwave_meta::storage::MemStore;
+use risingwave_meta_storage::MemStore;
 use risingwave_pb::common::WorkerNode;
 use risingwave_pb::hummock::version_update_payload::Payload;
 use risingwave_pb::hummock::HummockVersion;

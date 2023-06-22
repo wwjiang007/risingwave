@@ -18,12 +18,12 @@ use std::time::Duration;
 
 use etcd_client::{ConnectOptions, Error, GetOptions, LeaderKey, ResignOptions};
 use risingwave_common::bail;
+use risingwave_meta_storage::WrappedEtcdClient;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{oneshot, watch};
 use tokio::time;
 use tokio_stream::StreamExt;
 
-use crate::storage::WrappedEtcdClient;
 use crate::MetaResult;
 
 const META_ELECTION_KEY: &str = "__meta_election_";

@@ -40,6 +40,12 @@ use risingwave_hummock_sdk::{
     HummockContextId, HummockEpoch, HummockSstableId, HummockSstableObjectId, HummockVersionId,
     SstObjectIdRange, INVALID_VERSION_ID,
 };
+use risingwave_meta_model::{
+    BTreeMapEntryTransaction, BTreeMapTransaction, ClusterId, MetadataModel, ValTransaction,
+    VarTransaction,
+};
+use risingwave_meta_storage::{MetaStore, Transaction};
+use risingwave_meta_types::hummock::CompactStatus;
 use risingwave_pb::hummock::compact_task::{self, TaskStatus};
 use risingwave_pb::hummock::group_delta::DeltaType;
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
@@ -57,7 +63,7 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::warn;
 
 use crate::hummock::compaction::{
-    CompactStatus, LocalSelectorStatistic, ManualCompactionOption, ScaleCompactorInfo,
+    LocalSelectorStatistic, ManualCompactionOption, ScaleCompactorInfo,
 };
 use crate::hummock::compaction_scheduler::CompactionRequestChannelRef;
 use crate::hummock::error::{Error, Result};
@@ -70,12 +76,7 @@ use crate::hummock::{CompactorManagerRef, TASK_NORMAL};
 use crate::manager::{
     CatalogManagerRef, ClusterManagerRef, IdCategory, LocalNotification, MetaSrvEnv, META_NODE_ID,
 };
-use crate::model::{
-    BTreeMapEntryTransaction, BTreeMapTransaction, ClusterId, MetadataModel, ValTransaction,
-    VarTransaction,
-};
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::{MetaStore, Transaction};
 
 mod compaction_group_manager;
 mod context;
@@ -810,7 +811,8 @@ where
             .filter(|(table_id, _)| member_table_ids.contains(table_id))
             .collect();
 
-        let compact_task = compact_status.get_compact_task(
+        let compact_task = crate::hummock::compaction::get_compact_task(
+            &mut compact_status,
             current_version.get_compaction_group_levels(compaction_group_id),
             task_id as HummockCompactionTaskId,
             &group_config,
@@ -2080,8 +2082,11 @@ where
         let compaction = read_lock!(self, compaction).await;
         for (group_id, status) in &compaction.compaction_statuses {
             if let Some(levels) = version.levels.get(group_id) {
-                let info =
-                    status.get_compaction_info(levels, configs[group_id].compaction_config());
+                let info = crate::hummock::compaction::get_compaction_info(
+                    status,
+                    levels,
+                    configs[group_id].compaction_config(),
+                );
                 global_info.add(&info);
                 tracing::debug!("cg {} info {:?}", group_id, info);
             }

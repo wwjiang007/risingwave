@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use itertools::Itertools;
 use risingwave_common::catalog::{TableId, NON_RESERVED_PG_CATALOG_TABLE_ID};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::hummock::hummock_manager_service_server::HummockManagerService;
 use risingwave_pb::hummock::version_update_payload::Payload;
 use risingwave_pb::hummock::*;
@@ -26,7 +27,6 @@ use crate::hummock::compaction::ManualCompactionOption;
 use crate::hummock::{HummockManagerRef, VacuumManagerRef};
 use crate::manager::FragmentManagerRef;
 use crate::rpc::service::RwReceiverStream;
-use crate::storage::MetaStore;
 
 pub struct HummockServiceImpl<S>
 where

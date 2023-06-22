@@ -14,7 +14,6 @@
 
 use std::sync::atomic::{self, AtomicI64};
 
-use anyhow;
 use async_trait::async_trait;
 use etcd_client::{Compare, CompareOp, Error as EtcdError, GetOptions, Txn, TxnOp};
 use futures::Future;
@@ -23,8 +22,8 @@ use risingwave_common::config::MetaBackend;
 use tokio::sync::Mutex;
 
 use super::{Key, MetaStore, MetaStoreError, MetaStoreResult, Snapshot, Transaction, Value};
-use crate::storage::etcd_retry_client::EtcdRetryClient as KvClient;
-use crate::storage::WrappedEtcdClient;
+use crate::etcd_retry_client::EtcdRetryClient as KvClient;
+use crate::WrappedEtcdClient;
 
 impl From<EtcdError> for MetaStoreError {
     fn from(err: EtcdError) -> Self {

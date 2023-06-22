@@ -1,0 +1,53 @@
+[package]
+name = "risingwave_meta_model"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["workspace-hack"]
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["workspace-hack"]
+
+[dependencies]
+
+anyhow = "1"
+async-trait = "0.1"
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+itertools = "0.10"
+memcomparable = { version = "0.2" }
+prost = "0.11"
+risingwave_common = { path = "../../common" }
+risingwave_connector = { path = "../../connector" }
+risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
+risingwave_meta_storage = { path = "../storage" }
+risingwave_meta_types = { path = "../types" }
+risingwave_pb = { path = "../../prost" }
+thiserror = "1"
+tokio = { version = "0.2", package = "madsim-tokio", features = [
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "time",
+    "signal",
+] }
+tonic = { version = "0.2", package = "madsim-tonic" }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(not(madsim))'.dependencies]
+axum = "0.6"
+tower-http = { version = "0.3", features = ["add-extension", "cors", "fs"] }
+workspace-hack = { path = "../../workspace-hack" }
+
+[dev-dependencies]
+assert_matches = "1"
+maplit = "1.0.2"
+rand = "0.8"
+risingwave_test_runner = { path = "../../test_runner" }
+static_assertions = "1"
+tempfile = "3"

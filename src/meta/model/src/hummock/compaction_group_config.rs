@@ -19,13 +19,13 @@ pub use risingwave_common::catalog::TableOption;
 use risingwave_hummock_sdk::CompactionGroupId;
 use risingwave_pb::hummock::CompactionConfig;
 
-use crate::hummock::model::HUMMOCK_COMPACTION_GROUP_CONFIG_CF_NAME;
-use crate::model::{MetadataModel, MetadataModelResult};
+use crate::hummock::HUMMOCK_COMPACTION_GROUP_CONFIG_CF_NAME;
+use crate::{MetadataModel, MetadataModelResult};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompactionGroup {
-    pub(crate) group_id: CompactionGroupId,
-    pub(crate) compaction_config: Arc<CompactionConfig>,
+    pub group_id: CompactionGroupId,
+    pub compaction_config: Arc<CompactionConfig>,
 }
 
 impl CompactionGroup {

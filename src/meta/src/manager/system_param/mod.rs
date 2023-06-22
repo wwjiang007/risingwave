@@ -22,6 +22,8 @@ use anyhow::anyhow;
 use risingwave_common::system_param::reader::SystemParamsReader;
 use risingwave_common::system_param::{check_missing_params, set_system_param};
 use risingwave_common::{for_all_undeprecated_params, key_of};
+use risingwave_meta_model::{SystemParamsModel, ValTransaction, VarTransaction};
+use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::SystemParams;
 use tokio::sync::oneshot::Sender;
@@ -29,10 +31,7 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info;
 
-use self::model::SystemParamsModel;
 use super::NotificationManagerRef;
-use crate::model::{ValTransaction, VarTransaction};
-use crate::storage::{MetaStore, Transaction};
 use crate::{MetaError, MetaResult};
 
 pub type SystemParamsManagerRef<S> = Arc<SystemParamsManager<S>>;

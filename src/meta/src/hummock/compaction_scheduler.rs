@@ -23,6 +23,7 @@ use parking_lot::Mutex;
 use risingwave_common::util::select_all;
 use risingwave_hummock_sdk::compact::compact_task_to_string;
 use risingwave_hummock_sdk::CompactionGroupId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::hummock::compact_task::{self, TaskStatus};
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
 use risingwave_pb::hummock::CompactTask;
@@ -38,7 +39,6 @@ use crate::hummock::compaction::{
 use crate::hummock::error::Error;
 use crate::hummock::{CompactorManagerRef, HummockManagerRef};
 use crate::manager::{LocalNotification, MetaSrvEnv};
-use crate::storage::MetaStore;
 
 pub type CompactionSchedulerRef<S> = Arc<CompactionScheduler<S>>;
 pub type CompactionRequestChannelRef = Arc<CompactionRequestChannel>;

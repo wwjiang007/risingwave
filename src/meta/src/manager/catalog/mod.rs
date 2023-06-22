@@ -32,6 +32,8 @@ use risingwave_common::catalog::{
     DEFAULT_SUPER_USER_FOR_PG_ID, DEFAULT_SUPER_USER_ID, SYSTEM_SCHEMAS,
 };
 use risingwave_common::{bail, ensure};
+use risingwave_meta_model::{BTreeMapTransaction, MetadataModel, ValTransaction};
+use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
 use risingwave_pb::catalog::{
     Connection, Database, Function, Index, Schema, Sink, Source, Table, View,
@@ -45,14 +47,12 @@ use tracing::trace;
 use user::*;
 
 use crate::manager::{IdCategory, MetaSrvEnv, NotificationVersion, StreamingJob};
-use crate::model::{BTreeMapTransaction, MetadataModel, ValTransaction};
-use crate::storage::{MetaStore, Transaction};
 use crate::{MetaError, MetaResult};
 
 pub type DatabaseId = u32;
 pub type SchemaId = u32;
 pub type TableId = u32;
-pub type SourceId = u32;
+pub type SourceId = risingwave_meta_model::SourceId;
 pub type SinkId = u32;
 pub type RelationId = u32;
 pub type IndexId = u32;

@@ -21,6 +21,8 @@ use risingwave_common::catalog::TableId;
 use risingwave_common::hash::ActorMapping;
 use risingwave_connector::source::SplitImpl;
 use risingwave_hummock_sdk::HummockEpoch;
+use risingwave_meta_model::{ActorId, DispatcherId, FragmentId, TableFragments};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::source::{ConnectorSplit, ConnectorSplits};
 use risingwave_pb::stream_plan::add_mutation::Dispatchers;
 use risingwave_pb::stream_plan::barrier::Mutation;
@@ -37,8 +39,6 @@ use super::info::BarrierActorInfo;
 use super::trace::TracedEpoch;
 use crate::barrier::CommandChanges;
 use crate::manager::{FragmentManagerRef, WorkerId};
-use crate::model::{ActorId, DispatcherId, FragmentId, TableFragments};
-use crate::storage::MetaStore;
 use crate::stream::{build_actor_connector_splits, SourceManagerRef, SplitAssignment};
 use crate::MetaResult;
 

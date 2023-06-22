@@ -28,6 +28,7 @@ use axum::routing::{get, get_service};
 use axum::Router;
 use hyper::Request;
 use parking_lot::Mutex;
+use risingwave_meta_storage::MetaStore;
 use risingwave_rpc_client::ComputeClientPool;
 use tower::ServiceBuilder;
 use tower_http::add_extension::AddExtensionLayer;
@@ -35,7 +36,6 @@ use tower_http::cors::{self, CorsLayer};
 use tower_http::services::ServeDir;
 
 use crate::manager::{ClusterManagerRef, FragmentManagerRef};
-use crate::storage::MetaStore;
 
 #[derive(Clone)]
 pub struct DashboardService<S: MetaStore> {
@@ -56,6 +56,7 @@ pub(super) mod handlers {
     use anyhow::Context;
     use axum::Json;
     use itertools::Itertools;
+    use risingwave_meta_model::TableFragments;
     use risingwave_pb::catalog::table::TableType;
     use risingwave_pb::catalog::{Sink, Source, Table};
     use risingwave_pb::common::WorkerNode;
@@ -66,7 +67,6 @@ pub(super) mod handlers {
 
     use super::*;
     use crate::manager::WorkerId;
-    use crate::model::TableFragments;
 
     pub struct DashboardError(anyhow::Error);
     pub type Result<T> = std::result::Result<T, DashboardError>;
@@ -111,7 +111,7 @@ pub(super) mod handlers {
         meta_store: &S,
         table_type: TableType,
     ) -> Result<Json<Vec<Table>>> {
-        use crate::model::MetadataModel;
+        use risingwave_meta_model::MetadataModel;
 
         let results = Table::list(meta_store)
             .await
@@ -150,7 +150,7 @@ pub(super) mod handlers {
     pub async fn list_sources<S: MetaStore>(
         Extension(srv): Extension<Service<S>>,
     ) -> Result<Json<Vec<Source>>> {
-        use crate::model::MetadataModel;
+        use risingwave_meta_model::MetadataModel;
 
         let sources = Source::list(&*srv.meta_store).await.map_err(err)?;
         Ok(Json(sources))
@@ -159,7 +159,7 @@ pub(super) mod handlers {
     pub async fn list_sinks<S: MetaStore>(
         Extension(srv): Extension<Service<S>>,
     ) -> Result<Json<Vec<Sink>>> {
-        use crate::model::MetadataModel;
+        use risingwave_meta_model::MetadataModel;
 
         let sinks = Sink::list(&*srv.meta_store).await.map_err(err)?;
         Ok(Json(sinks))
@@ -201,7 +201,7 @@ pub(super) mod handlers {
     pub async fn list_fragments<S: MetaStore>(
         Extension(srv): Extension<Service<S>>,
     ) -> Result<Json<Vec<PbTableFragments>>> {
-        use crate::model::MetadataModel;
+        use risingwave_meta_model::MetadataModel;
 
         let table_fragments = TableFragments::list(&*srv.meta_store)
             .await

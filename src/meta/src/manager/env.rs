@@ -15,6 +15,10 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use risingwave_meta_model::ClusterId;
+#[cfg(any(test, feature = "test"))]
+use risingwave_meta_storage::MemStore;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::SystemParams;
 use risingwave_rpc_client::{StreamClientPool, StreamClientPoolRef};
 
@@ -23,10 +27,6 @@ use crate::manager::{
     IdGeneratorManager, IdGeneratorManagerRef, IdleManager, IdleManagerRef, NotificationManager,
     NotificationManagerRef,
 };
-use crate::model::ClusterId;
-#[cfg(any(test, feature = "test"))]
-use crate::storage::MemStore;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 /// [`MetaSrvEnv`] is the global environment in Meta service. The instance will be shared by all

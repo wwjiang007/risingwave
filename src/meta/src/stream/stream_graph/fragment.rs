@@ -23,6 +23,8 @@ use itertools::Itertools;
 use risingwave_common::bail;
 use risingwave_common::catalog::{generate_internal_table_name_with_type, TableId};
 use risingwave_common::util::stream_graph_visitor;
+use risingwave_meta_model::FragmentId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::catalog::Table;
 use risingwave_pb::meta::table_fragments::Fragment;
 use risingwave_pb::stream_plan::stream_fragment_graph::{
@@ -34,8 +36,6 @@ use risingwave_pb::stream_plan::{
 };
 
 use crate::manager::{IdGeneratorManagerRef, StreamingJob};
-use crate::model::FragmentId;
-use crate::storage::MetaStore;
 use crate::stream::stream_graph::id::{GlobalFragmentId, GlobalFragmentIdGen, GlobalTableIdGen};
 use crate::stream::stream_graph::schedule::Distribution;
 use crate::MetaResult;

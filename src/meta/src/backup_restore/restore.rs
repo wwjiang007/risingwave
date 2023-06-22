@@ -16,21 +16,20 @@ use std::sync::Arc;
 
 use clap::Parser;
 use itertools::Itertools;
-use risingwave_backup::error::{BackupError, BackupResult};
 use risingwave_backup::meta_snapshot::MetaSnapshot;
 use risingwave_backup::storage::MetaSnapshotStorageRef;
 use risingwave_common::config::MetaBackend;
 use risingwave_hummock_sdk::version_checkpoint_path;
+use risingwave_meta_model::hummock::CompactionGroup;
+use risingwave_meta_model::{ClusterId, MetadataModel, SystemParamsModel, TableFragments};
+use risingwave_meta_storage::{MetaStore, DEFAULT_COLUMN_FAMILY};
 use risingwave_object_store::object::object_metrics::ObjectStoreMetrics;
 use risingwave_object_store::object::parse_remote_object_store;
 use risingwave_pb::hummock::{HummockVersion, HummockVersionCheckpoint};
 
+use crate::backup_restore::error::{BackupError, BackupResult};
 use crate::backup_restore::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
 use crate::dispatch_meta_store;
-use crate::hummock::model::CompactionGroup;
-use crate::manager::model::SystemParamsModel;
-use crate::model::{ClusterId, MetadataModel, TableFragments};
-use crate::storage::{MetaStore, DEFAULT_COLUMN_FAMILY};
 
 /// Command-line arguments for restore.
 #[derive(Parser, Debug, Clone)]
@@ -291,6 +290,8 @@ mod tests {
     use clap::Parser;
     use itertools::Itertools;
     use risingwave_backup::meta_snapshot::{ClusterMetadata, MetaSnapshot};
+    use risingwave_meta_model::{MetadataModel, SystemParamsModel};
+    use risingwave_meta_storage::{MetaStore, DEFAULT_COLUMN_FAMILY};
     use risingwave_pb::hummock::HummockVersion;
     use risingwave_pb::meta::SystemParams;
 
@@ -298,9 +299,6 @@ mod tests {
     use crate::backup_restore::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
     use crate::backup_restore::RestoreOpts;
     use crate::dispatch_meta_store;
-    use crate::manager::model::SystemParamsModel;
-    use crate::model::MetadataModel;
-    use crate::storage::{MetaStore, DEFAULT_COLUMN_FAMILY};
 
     fn get_restore_opts() -> RestoreOpts {
         RestoreOpts::parse_from([

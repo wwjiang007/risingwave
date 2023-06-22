@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use itertools::Itertools;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::backup_service::MetaBackupManifestId;
 use risingwave_pb::catalog::Table;
 use risingwave_pb::common::worker_node::State::Running;
@@ -35,7 +36,6 @@ use crate::manager::{
     NotificationVersion, WorkerKey,
 };
 use crate::serving::ServingVnodeMappingRef;
-use crate::storage::MetaStore;
 
 pub struct NotificationServiceImpl<S: MetaStore> {
     env: MetaSrvEnv<S>,

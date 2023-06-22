@@ -431,6 +431,7 @@ mod tests {
     use risingwave_common::try_match_expand;
     use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
     use risingwave_hummock_sdk::HummockContextId;
+    use risingwave_meta_storage::MetaStore;
     use risingwave_pb::hummock::compact_task::{self, TaskStatus};
     use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
     use risingwave_pb::hummock::{CompactTask, CompactTaskAssignment, InputLevel, SstableInfo};
@@ -447,7 +448,6 @@ mod tests {
         to_local_sstable_info,
     };
     use crate::hummock::HummockManager;
-    use crate::storage::MetaStore;
 
     async fn add_compact_task<S>(hummock_manager: &HummockManager<S>, _context_id: u32, epoch: u64)
     where

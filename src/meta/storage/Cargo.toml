@@ -1,0 +1,49 @@
+[package]
+name = "risingwave_meta_storage"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["workspace-hack"]
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["workspace-hack"]
+
+[dependencies]
+anyhow = "1"
+assert_matches = "1"
+async-trait = "0.1"
+etcd-client = { version = "0.2", package = "madsim-etcd-client" }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+hex = "0.4"
+itertools = "0.10"
+risingwave_common = { path = "../../common" }
+thiserror = "1"
+tokio = { version = "0.2", package = "madsim-tokio", features = [
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "time",
+    "signal",
+] }
+tokio-retry = "0.3"
+tonic = { version = "0.2", package = "madsim-tonic" }
+tracing = "0.1"
+
+[target.'cfg(not(madsim))'.dependencies]
+axum = "0.6"
+tower-http = { version = "0.3", features = ["add-extension", "cors", "fs"] }
+workspace-hack = { path = "../../workspace-hack" }
+
+[dev-dependencies]
+assert_matches = "1"
+maplit = "1.0.2"
+rand = "0.8"
+risingwave_test_runner = { path = "../../test_runner" }
+static_assertions = "1"
+tempfile = "3"

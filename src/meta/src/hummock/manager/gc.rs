@@ -19,12 +19,12 @@ use function_name::named;
 use itertools::Itertools;
 use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockVersionExt;
 use risingwave_hummock_sdk::HummockSstableObjectId;
+use risingwave_meta_model::{BTreeMapTransaction, ValTransaction};
+use risingwave_meta_storage::{MetaStore, Transaction};
 
 use crate::hummock::error::Result;
 use crate::hummock::manager::{commit_multi_var, read_lock, write_lock};
 use crate::hummock::HummockManager;
-use crate::model::{BTreeMapTransaction, ValTransaction};
-use crate::storage::{MetaStore, Transaction};
 
 impl<S> HummockManager<S>
 where

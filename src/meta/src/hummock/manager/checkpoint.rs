@@ -22,6 +22,7 @@ use risingwave_hummock_sdk::compaction_group::hummock_version_ext::{
     object_size_map, summarize_group_deltas,
 };
 use risingwave_hummock_sdk::version_checkpoint_dir;
+use risingwave_meta_storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 use risingwave_pb::hummock::hummock_version_checkpoint::StaleObjects;
 use risingwave_pb::hummock::{HummockVersion, HummockVersionCheckpoint};
 
@@ -29,7 +30,6 @@ use crate::hummock::error::Result;
 use crate::hummock::manager::{read_lock, write_lock};
 use crate::hummock::metrics_utils::trigger_gc_stat;
 use crate::hummock::HummockManager;
-use crate::storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 
 const HUMMOCK_INIT_FLAG_KEY: &[u8] = b"hummock_init_flag";
 

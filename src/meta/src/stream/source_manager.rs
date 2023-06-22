@@ -25,10 +25,11 @@ use risingwave_common::catalog::TableId;
 use risingwave_connector::source::{
     ConnectorProperties, SplitEnumeratorImpl, SplitId, SplitImpl, SplitMetaData,
 };
+use risingwave_meta_model::{ActorId, FragmentId, TableFragments};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::catalog::Source;
 use risingwave_pb::connector_service::table_schema::Column;
 use risingwave_pb::connector_service::TableSchema;
-use risingwave_pb::source::{ConnectorSplit, ConnectorSplits};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, Mutex};
 use tokio::task::JoinHandle;
@@ -37,13 +38,13 @@ use tokio::{select, time};
 
 use crate::barrier::{BarrierScheduler, Command};
 use crate::manager::{CatalogManagerRef, FragmentManagerRef, SourceId};
-use crate::model::{ActorId, FragmentId, TableFragments};
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub type SourceManagerRef<S> = Arc<SourceManager<S>>;
-pub type SplitAssignment = HashMap<FragmentId, HashMap<ActorId, Vec<SplitImpl>>>;
+pub use risingwave_meta_model::stream::{
+    build_actor_connector_splits, build_actor_split_impls, SplitAssignment,
+};
 
 pub struct SourceManager<S: MetaStore> {
     pub(crate) paused: Mutex<()>,
@@ -775,39 +776,6 @@ where
     }
 }
 
-pub fn build_actor_connector_splits(
-    splits: &HashMap<ActorId, Vec<SplitImpl>>,
-) -> HashMap<u32, ConnectorSplits> {
-    splits
-        .iter()
-        .map(|(&actor_id, splits)| {
-            (
-                actor_id,
-                ConnectorSplits {
-                    splits: splits.iter().map(ConnectorSplit::from).collect(),
-                },
-            )
-        })
-        .collect()
-}
-
-pub fn build_actor_split_impls(
-    actor_splits: &HashMap<u32, ConnectorSplits>,
-) -> HashMap<ActorId, Vec<SplitImpl>> {
-    actor_splits
-        .iter()
-        .map(|(actor_id, ConnectorSplits { splits })| {
-            (
-                *actor_id,
-                splits
-                    .iter()
-                    .map(|split| SplitImpl::try_from(split).unwrap())
-                    .collect(),
-            )
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap, HashSet};
@@ -815,9 +783,9 @@ mod tests {
     use anyhow::anyhow;
     use risingwave_common::types::JsonbVal;
     use risingwave_connector::source::{SplitId, SplitMetaData};
+    use risingwave_meta_model::ActorId;
     use serde::{Deserialize, Serialize};
 
-    use crate::model::ActorId;
     use crate::stream::source_manager::{diff_splits, SplitDiffOptions};
 
     #[derive(Debug, Copy, Clone, Serialize, Deserialize)]

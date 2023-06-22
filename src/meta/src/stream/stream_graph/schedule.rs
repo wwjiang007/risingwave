@@ -28,6 +28,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use risingwave_common::bail;
 use risingwave_common::hash::{ParallelUnitId, ParallelUnitMapping};
+use risingwave_meta_model::ActorId;
 use risingwave_pb::common::{ActorInfo, ParallelUnit};
 use risingwave_pb::meta::table_fragments::fragment::{
     FragmentDistributionType, PbFragmentDistributionType,
@@ -35,7 +36,6 @@ use risingwave_pb::meta::table_fragments::fragment::{
 use risingwave_pb::stream_plan::DispatcherType::{self, *};
 
 use crate::manager::{WorkerId, WorkerLocations};
-use crate::model::ActorId;
 use crate::stream::stream_graph::fragment::CompleteStreamFragmentGraph;
 use crate::stream::stream_graph::id::GlobalFragmentId as Id;
 use crate::{MetaError, MetaResult};

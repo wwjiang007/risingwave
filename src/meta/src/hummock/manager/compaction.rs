@@ -17,13 +17,13 @@ use std::collections::BTreeMap;
 use function_name::named;
 use itertools::Itertools;
 use risingwave_hummock_sdk::{CompactionGroupId, HummockCompactionTaskId, HummockContextId};
+use risingwave_meta_model::BTreeMapTransaction;
+use risingwave_meta_storage::MetaStore;
+use risingwave_meta_types::hummock::CompactStatus;
 use risingwave_pb::hummock::CompactTaskAssignment;
 
-use crate::hummock::compaction::CompactStatus;
 use crate::hummock::manager::read_lock;
 use crate::hummock::HummockManager;
-use crate::model::BTreeMapTransaction;
-use crate::storage::MetaStore;
 
 #[derive(Default)]
 pub struct Compaction {
@@ -127,9 +127,9 @@ where
 #[cfg(test)]
 mod tests {
     use risingwave_hummock_sdk::CompactionGroupId;
+    use risingwave_meta_types::hummock::CompactStatus;
     use risingwave_pb::hummock::{CompactTask, CompactTaskAssignment, InputLevel, SstableInfo};
 
-    use crate::hummock::compaction::CompactStatus;
     use crate::hummock::manager::compaction::Compaction;
 
     #[tokio::test]

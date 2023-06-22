@@ -27,6 +27,9 @@ use risingwave_common::system_param::local_manager::LocalSystemParamsManager;
 use risingwave_common::telemetry::manager::TelemetryManager;
 use risingwave_common::telemetry::telemetry_env_enabled;
 use risingwave_common_service::metrics_manager::MetricsManager;
+use risingwave_meta_storage::{
+    EtcdMetaStore, MemStore, MetaStore, WrappedEtcdClient as EtcdClient,
+};
 use risingwave_pb::backup_service::backup_service_server::BackupServiceServer;
 use risingwave_pb::ddl_service::ddl_service_server::DdlServiceServer;
 use risingwave_pb::health::health_server::HealthServer;
@@ -74,7 +77,6 @@ use crate::rpc::service::system_params_service::SystemParamsServiceImpl;
 use crate::rpc::service::telemetry_service::TelemetryInfoServiceImpl;
 use crate::rpc::service::user_service::UserServiceImpl;
 use crate::serving::ServingVnodeMapping;
-use crate::storage::{EtcdMetaStore, MemStore, MetaStore, WrappedEtcdClient as EtcdClient};
 use crate::stream::{GlobalStreamManager, SourceManager};
 use crate::telemetry::{MetaReportCreator, MetaTelemetryInfoFetcher};
 use crate::{hummock, serving, MetaError, MetaResult};

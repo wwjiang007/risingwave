@@ -12,32 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod barrier;
+#![feature(lint_reasons)]
+
 mod catalog;
 mod cluster;
 mod error;
+pub mod hummock;
 mod migration_plan;
 mod notification;
-mod stream;
+pub mod stream;
+mod system_params;
 mod user;
-
 use std::collections::btree_map::{Entry, VacantEntry};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 use async_trait::async_trait;
-pub use barrier::*;
 pub use catalog::*;
 pub use cluster::*;
 pub use error::*;
 pub use migration_plan::*;
 pub use notification::*;
 use prost::Message;
+use risingwave_meta_storage::{MetaStore, MetaStoreError, Snapshot, Transaction};
 pub use stream::*;
+pub use system_params::SystemParamsModel;
 pub use user::*;
-
-use crate::storage::{MetaStore, MetaStoreError, Snapshot, Transaction};
 
 /// A global, unique identifier of an actor
 pub type ActorId = u32;
@@ -47,6 +48,10 @@ pub type DispatcherId = u64;
 
 /// A global, unique identifier of a fragment
 pub type FragmentId = u32;
+
+pub type SourceId = u32;
+
+pub type WorkerId = u32;
 
 pub trait Transactional {
     fn upsert_in_transaction(&self, trx: &mut Transaction) -> MetadataModelResult<()>;
@@ -168,7 +173,7 @@ macro_rules! for_all_metadata_models {
             // So be sure to update meta backup/restore when adding new items.
             { risingwave_pb::hummock::HummockVersion },
             { risingwave_pb::hummock::HummockVersionStats },
-            { crate::hummock::model::CompactionGroup },
+            { crate::hummock::CompactionGroup },
             { risingwave_pb::catalog::Database },
             { risingwave_pb::catalog::Schema },
             { risingwave_pb::catalog::Table },
@@ -176,14 +181,14 @@ macro_rules! for_all_metadata_models {
             { risingwave_pb::catalog::Sink },
             { risingwave_pb::catalog::Source },
             { risingwave_pb::catalog::View },
-            { crate::model::stream::TableFragments },
+            { crate::stream::TableFragments },
             { risingwave_pb::user::UserInfo },
             { risingwave_pb::catalog::Function },
             { risingwave_pb::catalog::Connection },
             // These items need not be included in a meta snapshot.
-            { crate::model::cluster::Worker },
+            { crate::cluster::Worker },
             { risingwave_pb::hummock::CompactTaskAssignment },
-            { crate::hummock::compaction::CompactStatus },
+            { crate::hummock::CompactStatus },
             { risingwave_pb::hummock::HummockVersionDelta },
             { risingwave_pb::hummock::HummockPinnedSnapshot },
             { risingwave_pb::hummock::HummockPinnedVersion },
@@ -650,8 +655,9 @@ impl<'a, K: Ord, V: PartialEq + Transactional> ValTransaction
 
 #[cfg(test)]
 mod tests {
+    use risingwave_meta_storage::Operation;
+
     use super::*;
-    use crate::storage::Operation;
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestTransactional {

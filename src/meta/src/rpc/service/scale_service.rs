@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use itertools::Itertools;
+use risingwave_meta_model::MetadataModel;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::meta::reschedule_request::Reschedule;
 use risingwave_pb::meta::scale_service_server::ScaleService;
@@ -25,8 +27,6 @@ use tonic::{Request, Response, Status};
 
 use crate::barrier::{BarrierScheduler, Command};
 use crate::manager::{CatalogManagerRef, ClusterManagerRef, FragmentManagerRef};
-use crate::model::MetadataModel;
-use crate::storage::MetaStore;
 use crate::stream::{GlobalStreamManagerRef, ParallelUnitReschedule, SourceManagerRef};
 
 pub struct ScaleServiceImpl<S: MetaStore> {

@@ -18,6 +18,8 @@ use std::sync::Arc;
 use futures::future::{try_join_all, BoxFuture};
 use itertools::Itertools;
 use risingwave_common::catalog::TableId;
+use risingwave_meta_model::{ActorId, TableFragments};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::catalog::Table;
 use risingwave_pb::stream_plan::update_mutation::MergeUpdate;
 use risingwave_pb::stream_plan::Dispatcher;
@@ -32,8 +34,6 @@ use super::Locations;
 use crate::barrier::{BarrierScheduler, Command};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv};
-use crate::model::{ActorId, TableFragments};
-use crate::storage::MetaStore;
 use crate::stream::SourceManagerRef;
 use crate::{MetaError, MetaResult};
 
@@ -549,6 +549,8 @@ mod tests {
 
     use risingwave_common::catalog::TableId;
     use risingwave_common::hash::ParallelUnitMapping;
+    use risingwave_meta_model::{ActorId, FragmentId};
+    use risingwave_meta_storage::MemStore;
     use risingwave_pb::common::{HostAddress, WorkerType};
     use risingwave_pb::meta::add_worker_node_request::Property;
     use risingwave_pb::meta::table_fragments::fragment::FragmentDistributionType;
@@ -576,9 +578,7 @@ mod tests {
         CatalogManager, CatalogManagerRef, ClusterManager, FragmentManager, MetaSrvEnv,
         StreamingClusterInfo,
     };
-    use crate::model::{ActorId, FragmentId};
     use crate::rpc::metrics::MetaMetrics;
-    use crate::storage::MemStore;
     use crate::stream::SourceManager;
     use crate::MetaOpts;
 

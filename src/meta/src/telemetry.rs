@@ -19,12 +19,12 @@ use risingwave_common::telemetry::report::{TelemetryInfoFetcher, TelemetryReport
 use risingwave_common::telemetry::{
     current_timestamp, SystemData, TelemetryNodeType, TelemetryReport, TelemetryReportBase,
 };
+use risingwave_meta_model::ClusterId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::WorkerType;
 use serde::{Deserialize, Serialize};
 
 use crate::manager::ClusterManager;
-use crate::model::ClusterId;
-use crate::storage::MetaStore;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct NodeCount {

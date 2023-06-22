@@ -16,7 +16,7 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use itertools::Itertools;
 
-use crate::storage::{
+use crate::{
     Key, MemStore, MetaStore, MetaStoreError, MetaStoreResult, Operation, Snapshot, Transaction,
     Value,
 };

@@ -12,14 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use risingwave_backup::error::BackupError;
+use risingwave_backup::error::BackupError as StorageBackupError;
+use risingwave_common::error::BoxedError;
+use risingwave_meta_model::MetadataModelError;
+use risingwave_meta_storage::MetaStoreError;
+use thiserror::Error;
 
-use crate::model::MetadataModelError;
-use crate::storage::MetaStoreError;
+pub type BackupResult<T> = Result<T, BackupError>;
+
+#[derive(Error, Debug)]
+pub enum BackupError {
+    #[error("BackupStorage error: {0}")]
+    BackupStorage(
+        #[backtrace]
+        #[source]
+        BoxedError,
+    ),
+    #[error("MetaStorage error: {0}")]
+    MetaStorage(
+        #[backtrace]
+        #[source]
+        BoxedError,
+    ),
+    #[error("StateStorage error: {0}")]
+    StateStorage(
+        #[backtrace]
+        #[source]
+        BoxedError,
+    ),
+    #[error("Encoding error: {0}")]
+    Encoding(
+        #[backtrace]
+        #[source]
+        BoxedError,
+    ),
+    #[error("Decoding error: {0}")]
+    Decoding(
+        #[backtrace]
+        #[source]
+        BoxedError,
+    ),
+    #[error("Checksum mismatch: expected {expected}, found: {found}")]
+    ChecksumMismatch { expected: u64, found: u64 },
+    #[error("Meta storage is not empty before being restored")]
+    NonemptyMetaStorage,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
 use crate::MetaError;
 
-impl From<BackupError> for MetaError {
-    fn from(e: BackupError) -> Self {
+impl From<StorageBackupError> for MetaError {
+    fn from(e: StorageBackupError) -> Self {
         anyhow::anyhow!(e).into()
     }
 }
@@ -39,5 +83,22 @@ impl From<MetaError> for BackupError {
 impl From<MetadataModelError> for BackupError {
     fn from(e: MetadataModelError) -> Self {
         BackupError::Decoding(e.into())
+    }
+}
+
+impl From<StorageBackupError> for BackupError {
+    fn from(e: StorageBackupError) -> Self {
+        match e {
+            StorageBackupError::BackupStorage(e) => BackupError::BackupStorage(e),
+            StorageBackupError::MetaStorage(e) => BackupError::MetaStorage(e),
+            StorageBackupError::StateStorage(e) => BackupError::StateStorage(e),
+            StorageBackupError::Encoding(e) => BackupError::Encoding(e),
+            StorageBackupError::Decoding(e) => BackupError::Decoding(e),
+            StorageBackupError::ChecksumMismatch { expected, found } => {
+                BackupError::ChecksumMismatch { expected, found }
+            }
+            StorageBackupError::NonemptyMetaStorage => BackupError::NonemptyMetaStorage,
+            StorageBackupError::Other(e) => BackupError::Other(e),
+        }
     }
 }

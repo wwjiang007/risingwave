@@ -25,6 +25,8 @@ use risingwave_common::bail;
 use risingwave_common::buffer::{Bitmap, BitmapBuilder};
 use risingwave_common::hash::{ActorMapping, ParallelUnitId, VirtualNode};
 use risingwave_common::util::iter_util::ZipEqDebug;
+use risingwave_meta_model::{ActorId, DispatcherId, FragmentId, TableFragments};
+use risingwave_meta_storage::{MetaStore, MetaStoreError, Transaction, DEFAULT_COLUMN_FAMILY};
 use risingwave_pb::common::{ActorInfo, ParallelUnit, WorkerNode};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
 use risingwave_pb::meta::table_fragments::fragment::FragmentDistributionType;
@@ -38,8 +40,6 @@ use uuid::Uuid;
 
 use crate::barrier::{Command, Reschedule};
 use crate::manager::{IdCategory, WorkerId};
-use crate::model::{ActorId, DispatcherId, FragmentId, TableFragments};
-use crate::storage::{MetaStore, MetaStoreError, Transaction, DEFAULT_COLUMN_FAMILY};
 use crate::stream::GlobalStreamManager;
 use crate::{MetaError, MetaResult};
 

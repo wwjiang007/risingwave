@@ -17,13 +17,13 @@ use std::ops::{Add, Deref};
 use std::time::{Duration, SystemTime};
 
 use risingwave_hummock_sdk::HummockSstableObjectId;
+use risingwave_meta_storage::{MetaStore, MetaStoreError, Snapshot};
 use risingwave_pb::common::{HostAddress, WorkerNode, WorkerType};
 use risingwave_pb::meta::heartbeat_request::extra_info::Info;
 use uuid::Uuid;
 
 use super::MetadataModelError;
-use crate::model::{MetadataModel, MetadataModelResult};
-use crate::storage::{MetaStore, MetaStoreError, Snapshot};
+use crate::{MetadataModel, MetadataModelResult};
 
 /// Column family name for cluster.
 const WORKER_CF_NAME: &str = "cf/worker";
@@ -125,7 +125,8 @@ const CLUSTER_ID_KEY: &[u8] = "cluster_id".as_bytes();
 pub struct ClusterId(String);
 
 impl ClusterId {
-    pub(crate) fn new() -> Self {
+    #![expect(clippy::new_without_default)]
+    pub fn new() -> Self {
         Self(Uuid::new_v4().to_string())
     }
 
@@ -135,15 +136,13 @@ impl ClusterId {
         ))
     }
 
-    pub(crate) async fn from_meta_store<S: MetaStore>(
+    pub async fn from_meta_store<S: MetaStore>(
         meta_store: &S,
     ) -> MetadataModelResult<Option<Self>> {
         Self::from_snapshot::<S>(&meta_store.snapshot().await).await
     }
 
-    pub(crate) async fn from_snapshot<S: MetaStore>(
-        s: &S::Snapshot,
-    ) -> MetadataModelResult<Option<Self>> {
+    pub async fn from_snapshot<S: MetaStore>(s: &S::Snapshot) -> MetadataModelResult<Option<Self>> {
         match s.get_cf(CLUSTER_ID_CF_NAME, CLUSTER_ID_KEY).await {
             Ok(bytes) => Ok(Some(Self::from_bytes(bytes)?)),
             Err(e) => match e {
@@ -153,10 +152,7 @@ impl ClusterId {
         }
     }
 
-    pub(crate) async fn put_at_meta_store<S: MetaStore>(
-        &self,
-        meta_store: &S,
-    ) -> MetadataModelResult<()> {
+    pub async fn put_at_meta_store<S: MetaStore>(&self, meta_store: &S) -> MetadataModelResult<()> {
         Ok(meta_store
             .put_cf(
                 CLUSTER_ID_CF_NAME,

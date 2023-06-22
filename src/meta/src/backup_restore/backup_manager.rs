@@ -17,23 +17,23 @@ use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use itertools::Itertools;
-use risingwave_backup::error::BackupError;
 use risingwave_backup::storage::{BoxedMetaSnapshotStorage, ObjectStoreMetaSnapshotStorage};
 use risingwave_backup::{MetaBackupJobId, MetaSnapshotId, MetaSnapshotManifest};
 use risingwave_common::bail;
 use risingwave_hummock_sdk::HummockSstableObjectId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_object_store::object::object_metrics::ObjectStoreMetrics;
 use risingwave_object_store::object::parse_remote_object_store;
 use risingwave_pb::backup_service::{BackupJobStatus, MetaBackupManifestId};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use tokio::task::JoinHandle;
 
+use crate::backup_restore::error::BackupError;
 use crate::backup_restore::meta_snapshot_builder::MetaSnapshotBuilder;
 use crate::backup_restore::metrics::BackupManagerMetrics;
 use crate::hummock::{HummockManagerRef, HummockVersionSafePoint};
 use crate::manager::{IdCategory, LocalNotification, MetaSrvEnv};
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub enum BackupJobResult {

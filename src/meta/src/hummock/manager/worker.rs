@@ -15,6 +15,7 @@
 use std::time::Duration;
 
 use risingwave_hummock_sdk::HummockVersionId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::WorkerType;
 use sync_point::sync_point;
 use tokio::task::JoinHandle;
@@ -23,7 +24,6 @@ use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use crate::hummock::utils::RetryableError;
 use crate::hummock::{HummockManager, HummockManagerRef};
 use crate::manager::LocalNotification;
-use crate::storage::MetaStore;
 
 pub type HummockManagerEventSender = tokio::sync::mpsc::UnboundedSender<HummockManagerEvent>;
 pub type HummockManagerEventReceiver = tokio::sync::mpsc::UnboundedReceiver<HummockManagerEvent>;

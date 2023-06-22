@@ -20,10 +20,10 @@ mod tests {
     use maplit::btreeset;
     use risingwave_common::buffer::Bitmap;
     use risingwave_common::hash::{ActorMapping, ParallelUnitId, ParallelUnitMapping, VirtualNode};
+    use risingwave_meta_model::ActorId;
     use risingwave_pb::common::ParallelUnit;
     use risingwave_pb::stream_plan::StreamActor;
 
-    use crate::model::ActorId;
     use crate::stream::scale::rebalance_actor_vnode;
 
     fn simulated_parallel_unit_nums(min: Option<usize>, max: Option<usize>) -> Vec<usize> {

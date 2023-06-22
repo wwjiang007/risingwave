@@ -27,6 +27,8 @@ use risingwave_common::catalog::TableId;
 use risingwave_common::util::epoch::INVALID_EPOCH;
 use risingwave_common::util::tracing::TracingContext;
 use risingwave_hummock_sdk::{ExtendedSstableInfo, HummockSstableObjectId};
+use risingwave_meta_model::ActorId;
+use risingwave_meta_storage::meta_store::MetaStore;
 use risingwave_pb::ddl_service::DdlProgress;
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
@@ -52,9 +54,7 @@ use crate::manager::{
     CatalogManagerRef, ClusterManagerRef, FragmentManagerRef, LocalNotification, MetaSrvEnv,
     WorkerId,
 };
-use crate::model::{ActorId, BarrierManagerState};
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::meta_store::MetaStore;
 use crate::stream::SourceManagerRef;
 use crate::{MetaError, MetaResult};
 
@@ -1069,4 +1069,59 @@ fn collect_synced_ssts(
         synced_ssts.append(&mut t);
     }
     (sst_to_worker, synced_ssts)
+}
+
+use risingwave_meta_storage::{MetaStoreError, MetaStoreResult, DEFAULT_COLUMN_FAMILY};
+
+/// `BarrierManagerState` defines the necessary state of `GlobalBarrierManager`, this will be stored
+/// persistently to meta store. Add more states when needed.
+pub struct BarrierManagerState {
+    /// The last sent `prev_epoch`
+    in_flight_prev_epoch: TracedEpoch,
+}
+
+const BARRIER_MANAGER_STATE_KEY: &[u8] = b"barrier_manager_state";
+
+impl BarrierManagerState {
+    pub async fn create<S>(store: &S) -> Self
+    where
+        S: MetaStore,
+    {
+        let in_flight_prev_epoch = match store
+            .get_cf(DEFAULT_COLUMN_FAMILY, BARRIER_MANAGER_STATE_KEY)
+            .await
+        {
+            Ok(byte_vec) => memcomparable::from_slice::<u64>(&byte_vec).unwrap().into(),
+            Err(MetaStoreError::ItemNotFound(_)) => INVALID_EPOCH.into(),
+            Err(e) => panic!("{:?}", e),
+        };
+        Self {
+            in_flight_prev_epoch: TracedEpoch::new(in_flight_prev_epoch),
+        }
+    }
+
+    pub async fn update_inflight_prev_epoch<S>(
+        &mut self,
+        store: &S,
+        new_epoch: TracedEpoch,
+    ) -> MetaStoreResult<()>
+    where
+        S: MetaStore,
+    {
+        store
+            .put_cf(
+                DEFAULT_COLUMN_FAMILY,
+                BARRIER_MANAGER_STATE_KEY.to_vec(),
+                memcomparable::to_vec(&new_epoch.value().0).unwrap(),
+            )
+            .await?;
+
+        self.in_flight_prev_epoch = new_epoch;
+
+        Ok(())
+    }
+
+    pub fn in_flight_prev_epoch(&self) -> TracedEpoch {
+        self.in_flight_prev_epoch.clone()
+    }
 }

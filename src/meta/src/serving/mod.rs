@@ -18,6 +18,8 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use risingwave_common::hash::ParallelUnitMapping;
 use risingwave_common::vnode_mapping::vnode_placement::place_vnode;
+use risingwave_meta_model::FragmentId;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::{WorkerNode, WorkerType};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::{FragmentParallelUnitMapping, FragmentParallelUnitMappings};
@@ -27,8 +29,6 @@ use tokio::task::JoinHandle;
 use crate::manager::{
     ClusterManagerRef, FragmentManagerRef, LocalNotification, NotificationManagerRef,
 };
-use crate::model::FragmentId;
-use crate::storage::MetaStore;
 
 pub type ServingVnodeMappingRef = Arc<ServingVnodeMapping>;
 

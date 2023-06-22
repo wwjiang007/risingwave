@@ -23,6 +23,8 @@ use itertools::Itertools;
 use parking_lot::RwLock;
 use risingwave_hummock_sdk::compact::estimate_state_for_compaction;
 use risingwave_hummock_sdk::{HummockCompactionTaskId, HummockContextId};
+use risingwave_meta_model::MetadataModel;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
 use risingwave_pb::hummock::{
     CancelCompactTask, CompactTask, CompactTaskAssignment, CompactTaskProgress, CompactorWorkload,
@@ -33,8 +35,6 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use super::compaction_schedule_policy::{CompactionSchedulePolicy, RoundRobinPolicy, ScoredPolicy};
 use crate::hummock::error::Result;
 use crate::manager::MetaSrvEnv;
-use crate::model::MetadataModel;
-use crate::storage::MetaStore;
 use crate::MetaResult;
 
 pub type CompactorManagerRef = Arc<CompactorManager>;

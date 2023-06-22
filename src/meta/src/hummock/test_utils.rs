@@ -21,6 +21,7 @@ use risingwave_hummock_sdk::key::key_with_epoch;
 use risingwave_hummock_sdk::{
     CompactionGroupId, HummockContextId, HummockEpoch, HummockSstableObjectId, LocalSstableInfo,
 };
+use risingwave_meta_storage::{MemStore, MetaStore};
 use risingwave_pb::common::{HostAddress, WorkerNode, WorkerType};
 use risingwave_pb::hummock::compact_task::TaskStatus;
 use risingwave_pb::hummock::{
@@ -33,7 +34,6 @@ use crate::hummock::compaction::default_level_selector;
 use crate::hummock::{CompactorManager, HummockManager, HummockManagerRef};
 use crate::manager::{ClusterManager, ClusterManagerRef, MetaSrvEnv, META_NODE_ID};
 use crate::rpc::metrics::MetaMetrics;
-use crate::storage::{MemStore, MetaStore};
 
 pub fn to_local_sstable_info(ssts: &[SstableInfo]) -> Vec<LocalSstableInfo> {
     ssts.iter()

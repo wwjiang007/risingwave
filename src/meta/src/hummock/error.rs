@@ -13,11 +13,10 @@
 // limitations under the License.
 
 use risingwave_hummock_sdk::{HummockContextId, HummockSstableObjectId};
+use risingwave_meta_model::MetadataModelError;
+use risingwave_meta_storage::MetaStoreError;
 use risingwave_object_store::object::ObjectError;
 use thiserror::Error;
-
-use crate::model::MetadataModelError;
-use crate::storage::MetaStoreError;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

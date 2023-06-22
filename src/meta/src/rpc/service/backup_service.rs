@@ -14,6 +14,7 @@
 
 use std::ops::Deref;
 
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::backup_service::backup_service_server::BackupService;
 use risingwave_pb::backup_service::{
     BackupMetaRequest, BackupMetaResponse, DeleteMetaSnapshotRequest, DeleteMetaSnapshotResponse,
@@ -23,7 +24,6 @@ use risingwave_pb::backup_service::{
 use tonic::{Request, Response, Status};
 
 use crate::backup_restore::BackupManagerRef;
-use crate::storage::MetaStore;
 
 pub struct BackupServiceImpl<S>
 where

@@ -26,6 +26,8 @@ use risingwave_hummock_sdk::compaction_group::{StateTableId, StaticCompactionGro
 use risingwave_hummock_sdk::{
     CompactionGroupId, HummockContextId, HummockSstableObjectId, HummockVersionId, FIRST_VERSION_ID,
 };
+use risingwave_meta_model::hummock::CompactionGroup;
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::WorkerNode;
 use risingwave_pb::hummock::write_limits::WriteLimit;
 use risingwave_pb::hummock::{
@@ -37,9 +39,7 @@ use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use crate::hummock::manager::worker::{HummockManagerEvent, HummockManagerEventSender};
 use crate::hummock::manager::{read_lock, write_lock};
 use crate::hummock::metrics_utils::{trigger_safepoint_stat, trigger_write_stop_stats};
-use crate::hummock::model::CompactionGroup;
 use crate::hummock::HummockManager;
-use crate::storage::MetaStore;
 
 /// `HummockVersionSafePoint` prevents hummock versions GE than it from being GC.
 /// It's used by meta node itself to temporarily pin versions.
@@ -342,13 +342,13 @@ mod tests {
     use std::sync::Arc;
 
     use risingwave_hummock_sdk::{CompactionGroupId, HummockVersionId};
+    use risingwave_meta_model::hummock::CompactionGroup;
     use risingwave_pb::hummock::hummock_version::Levels;
     use risingwave_pb::hummock::write_limits::WriteLimit;
     use risingwave_pb::hummock::{HummockPinnedVersion, HummockVersion, Level, OverlappingLevel};
 
     use crate::hummock::compaction::compaction_config::CompactionConfigBuilder;
     use crate::hummock::manager::versioning::{calc_new_write_limits, Versioning};
-    use crate::hummock::model::CompactionGroup;
 
     #[test]
     fn test_min_pinned_version_id() {

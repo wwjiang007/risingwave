@@ -19,11 +19,11 @@ use risingwave_common::constants::hummock::TABLE_OPTION_DUMMY_RETENTION_SECOND;
 use risingwave_common::util::epoch::Epoch;
 use risingwave_hummock_sdk::compaction_group::StateTableId;
 use risingwave_hummock_sdk::key_range::KeyRangeCommon;
+use risingwave_meta_types::hummock::LevelHandler;
 use risingwave_pb::hummock::hummock_version::Levels;
 use risingwave_pb::hummock::{InputLevel, KeyRange, SstableInfo};
 
 use super::CompactionInput;
-use crate::hummock::level_handler::LevelHandler;
 
 const MIN_TTL_EXPIRE_INTERVAL_MS: u64 = 60 * 60 * 1000; // 1h
 
@@ -220,6 +220,7 @@ impl TtlReclaimCompactionPicker {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use risingwave_meta_model::hummock::CompactionGroup;
     use risingwave_pb::hummock::compact_task;
     pub use risingwave_pb::hummock::{KeyRange, Level, LevelType};
 
@@ -231,7 +232,6 @@ mod test {
     };
     use crate::hummock::compaction::level_selector::{LevelSelector, TtlCompactionSelector};
     use crate::hummock::compaction::LocalSelectorStatistic;
-    use crate::hummock::model::CompactionGroup;
 
     #[test]
     fn test_ttl_reclaim_compaction_selector() {

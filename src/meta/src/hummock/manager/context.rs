@@ -21,6 +21,8 @@ use itertools::Itertools;
 use risingwave_hummock_sdk::{
     ExtendedSstableInfo, HummockContextId, HummockEpoch, HummockSstableObjectId,
 };
+use risingwave_meta_model::{BTreeMapTransaction, ValTransaction};
+use risingwave_meta_storage::{MetaStore, Transaction};
 use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
 use risingwave_pb::hummock::{HummockVersion, ValidationTask};
 
@@ -30,8 +32,6 @@ use crate::hummock::manager::{
 };
 use crate::hummock::HummockManager;
 use crate::manager::META_NODE_ID;
-use crate::model::{BTreeMapTransaction, ValTransaction};
-use crate::storage::{MetaStore, Transaction};
 
 impl<S> HummockManager<S>
 where
