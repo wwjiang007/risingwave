@@ -4178,9 +4178,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.52"
+version = "0.10.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01b8574602df80f7b85fdfc5392fa884a4e3b3f4f35402c070ab34c3d3f78d56"
+checksum = "345df152bc43501c5eb9e4654ff05f794effb78d4efe3d53abc158baddc0703d"
 dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
@@ -4219,9 +4219,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.87"
+version = "0.9.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e17f59264b2809d77ae94f0e1ebabc434773f370d6ca667bd223ea10e06cc7e"
+checksum = "374533b0e45f3a7ced10fcaeccca020e66656bc03dac384f852e4e5a7a8104a6"
 dependencies = [
  "cc",
  "libc",
@@ -4949,9 +4949,9 @@ dependencies = [
 
 [[package]]
 name = "pretty-xmlish"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd3571b8a349f2ae161a00e08b9c36cd34dfb53a3451a5a266becd0ff1d83b0c"
+checksum = "4b8521f917709e972580e93427ac30d777c94689f61abeaf211b518ccc4e324d"
 
 [[package]]
 name = "pretty_assertions"
@@ -5906,7 +5906,6 @@ dependencies = [
  "risingwave_rpc_client",
  "risingwave_rt",
  "risingwave_storage",
- "risingwave_tracing",
  "tracing",
  "workspace-hack",
 ]
@@ -6224,6 +6223,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "bytes",
+ "clap 4.3.4",
  "criterion",
  "expect-test",
  "fail",
@@ -6236,6 +6236,7 @@ dependencies = [
  "risingwave_common",
  "risingwave_common_service",
  "risingwave_hummock_sdk",
+ "risingwave_hummock_trace",
  "risingwave_meta",
  "risingwave_meta_storage",
  "risingwave_object_store",
@@ -6243,7 +6244,7 @@ dependencies = [
  "risingwave_rpc_client",
  "risingwave_storage",
  "risingwave_test_runner",
- "risingwave_tracing",
+ "serde",
  "serial_test",
  "sync-point",
  "workspace-hack",
@@ -6739,7 +6740,6 @@ dependencies = [
  "risingwave_pb",
  "risingwave_rpc_client",
  "risingwave_test_runner",
- "risingwave_tracing",
  "scopeguard",
  "sled",
  "spin 0.9.8",
@@ -6821,18 +6821,6 @@ version = "1.0.0-alpha"
 dependencies = [
  "fail",
  "sync-point",
- "workspace-hack",
-]
-
-[[package]]
-name = "risingwave_tracing"
-version = "1.0.0-alpha"
-dependencies = [
- "anyhow",
- "futures",
- "madsim-tokio",
- "rand",
- "tracing",
  "workspace-hack",
 ]
 
