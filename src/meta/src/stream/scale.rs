@@ -26,7 +26,7 @@ use risingwave_common::buffer::{Bitmap, BitmapBuilder};
 use risingwave_common::hash::{ActorMapping, ParallelUnitId, VirtualNode};
 use risingwave_common::util::iter_util::ZipEqDebug;
 use risingwave_meta_model::{ActorId, DispatcherId, FragmentId, TableFragments};
-use risingwave_meta_storage::{MetaStore, MetaStoreError, Transaction, DEFAULT_COLUMN_FAMILY};
+use risingwave_meta_storage::MetaStore;
 use risingwave_pb::common::{ActorInfo, ParallelUnit, WorkerNode};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
 use risingwave_pb::meta::table_fragments::fragment::FragmentDistributionType;
@@ -41,52 +41,7 @@ use uuid::Uuid;
 use crate::barrier::{Command, Reschedule};
 use crate::manager::{IdCategory, WorkerId};
 use crate::stream::GlobalStreamManager;
-use crate::{MetaError, MetaResult};
-
-#[derive(Copy, Clone, Debug)]
-pub struct TableRevision(u64);
-
-const TABLE_REVISION_KEY: &[u8] = b"table_revision";
-
-impl From<TableRevision> for u64 {
-    fn from(value: TableRevision) -> Self {
-        value.0
-    }
-}
-
-impl TableRevision {
-    pub async fn get<S>(store: &S) -> MetaResult<Self>
-    where
-        S: MetaStore,
-    {
-        let version = match store
-            .get_cf(DEFAULT_COLUMN_FAMILY, TABLE_REVISION_KEY)
-            .await
-        {
-            Ok(byte_vec) => memcomparable::from_slice(&byte_vec).unwrap(),
-            Err(MetaStoreError::ItemNotFound(_)) => 0,
-            Err(e) => return Err(MetaError::from(e)),
-        };
-
-        Ok(Self(version))
-    }
-
-    pub fn next(&self) -> Self {
-        TableRevision(self.0 + 1)
-    }
-
-    pub fn store(&self, txn: &mut Transaction) {
-        txn.put(
-            DEFAULT_COLUMN_FAMILY.to_string(),
-            TABLE_REVISION_KEY.to_vec(),
-            memcomparable::to_vec(&self.0).unwrap(),
-        );
-    }
-
-    pub fn inner(&self) -> u64 {
-        self.0
-    }
-}
+use crate::MetaResult;
 
 #[derive(Debug)]
 pub struct ParallelUnitReschedule {

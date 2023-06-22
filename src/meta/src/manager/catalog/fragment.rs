@@ -27,7 +27,9 @@ use risingwave_meta_model::{
     ActorId, BTreeMapTransaction, FragmentId, MetadataModel, MigrationPlan, TableFragments,
     ValTransaction,
 };
-use risingwave_meta_storage::{MetaStore, Transaction};
+use risingwave_meta_storage::{MetaStore, MetaStoreError, Transaction, DEFAULT_COLUMN_FAMILY};
+use risingwave_meta_types::barrier::Reschedule;
+use risingwave_meta_types::SplitAssignment;
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use risingwave_pb::meta::table_fragments::actor_status::ActorState;
 use risingwave_pb::meta::table_fragments::{ActorStatus, Fragment, State};
@@ -39,11 +41,54 @@ use risingwave_pb::stream_plan::{
 };
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use crate::barrier::Reschedule;
-use crate::manager::cluster::WorkerId;
-use crate::manager::{commit_meta, commit_meta_with_trx, LocalNotification, MetaSrvEnv};
-use crate::stream::{SplitAssignment, TableRevision};
-use crate::MetaResult;
+use super::super::cluster::WorkerId;
+use super::super::{commit_meta, commit_meta_with_trx, LocalNotification, MetaSrvEnv};
+use crate::{MetaError, MetaResult};
+
+#[derive(Copy, Clone, Debug)]
+pub struct TableRevision(u64);
+
+const TABLE_REVISION_KEY: &[u8] = b"table_revision";
+
+impl From<TableRevision> for u64 {
+    fn from(value: TableRevision) -> Self {
+        value.0
+    }
+}
+
+impl TableRevision {
+    pub async fn get<S>(store: &S) -> MetaResult<Self>
+    where
+        S: MetaStore,
+    {
+        let version = match store
+            .get_cf(DEFAULT_COLUMN_FAMILY, TABLE_REVISION_KEY)
+            .await
+        {
+            Ok(byte_vec) => memcomparable::from_slice(&byte_vec).unwrap(),
+            Err(MetaStoreError::ItemNotFound(_)) => 0,
+            Err(e) => return Err(MetaError::from(e)),
+        };
+
+        Ok(Self(version))
+    }
+
+    pub fn next(&self) -> Self {
+        TableRevision(self.0 + 1)
+    }
+
+    pub fn store(&self, txn: &mut Transaction) {
+        txn.put(
+            DEFAULT_COLUMN_FAMILY.to_string(),
+            TABLE_REVISION_KEY.to_vec(),
+            memcomparable::to_vec(&self.0).unwrap(),
+        );
+    }
+
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
 
 pub struct FragmentManagerCore {
     table_fragments: BTreeMap<TableId, TableFragments>,

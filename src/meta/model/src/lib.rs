@@ -36,22 +36,10 @@ pub use migration_plan::*;
 pub use notification::*;
 use prost::Message;
 use risingwave_meta_storage::{MetaStore, MetaStoreError, Snapshot, Transaction};
+pub use risingwave_meta_types::{ActorId, DispatcherId, FragmentId, SourceId, WorkerId};
 pub use stream::*;
 pub use system_params::SystemParamsModel;
 pub use user::*;
-
-/// A global, unique identifier of an actor
-pub type ActorId = u32;
-
-/// Should be used together with `ActorId` to uniquely identify a dispatcher
-pub type DispatcherId = u64;
-
-/// A global, unique identifier of a fragment
-pub type FragmentId = u32;
-
-pub type SourceId = u32;
-
-pub type WorkerId = u32;
 
 pub trait Transactional {
     fn upsert_in_transaction(&self, trx: &mut Transaction) -> MetadataModelResult<()>;

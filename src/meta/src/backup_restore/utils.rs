@@ -22,8 +22,8 @@ use risingwave_meta_storage::{EtcdMetaStore, MemStore, WrappedEtcdClient as Etcd
 use risingwave_object_store::object::object_metrics::ObjectStoreMetrics;
 use risingwave_object_store::object::parse_remote_object_store;
 
-use crate::backup_restore::error::BackupResult;
-use crate::backup_restore::RestoreOpts;
+use super::error::BackupResult;
+use super::RestoreOpts;
 use crate::MetaStoreBackend;
 
 #[derive(Clone)]

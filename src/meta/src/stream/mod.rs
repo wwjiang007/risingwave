@@ -21,6 +21,7 @@ mod stream_manager;
 mod test_fragmenter;
 mod test_scale;
 
+pub use risingwave_meta_types::SplitAssignment;
 pub use scale::*;
 pub use sink::*;
 pub use source_manager::*;

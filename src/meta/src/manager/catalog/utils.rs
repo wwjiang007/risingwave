@@ -24,7 +24,7 @@ use risingwave_sqlparser::ast::{
 };
 use risingwave_sqlparser::parser::Parser;
 
-use crate::manager::{ConnectionId, DatabaseManager};
+use super::{ConnectionId, DatabaseManager};
 
 pub fn refcnt_inc_connection(
     database_mgr: &mut DatabaseManager,
@@ -385,7 +385,7 @@ impl ReplaceTableExprRewriter {
 
 #[cfg(test)]
 mod tests {
-    use crate::manager::catalog::utils::{alter_relation_rename, alter_relation_rename_refs};
+    use super::super::utils::{alter_relation_rename, alter_relation_rename_refs};
 
     #[test]
     fn test_alter_table_rename() {

@@ -28,9 +28,9 @@ use risingwave_pb::backup_service::{BackupJobStatus, MetaBackupManifestId};
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
 use tokio::task::JoinHandle;
 
-use crate::backup_restore::error::BackupError;
-use crate::backup_restore::meta_snapshot_builder::MetaSnapshotBuilder;
-use crate::backup_restore::metrics::BackupManagerMetrics;
+use super::error::BackupError;
+use super::meta_snapshot_builder::MetaSnapshotBuilder;
+use super::metrics::BackupManagerMetrics;
 use crate::hummock::{HummockManagerRef, HummockVersionSafePoint};
 use crate::manager::{IdCategory, LocalNotification, MetaSrvEnv};
 use crate::rpc::metrics::MetaMetrics;

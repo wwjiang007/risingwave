@@ -23,10 +23,9 @@ use risingwave_meta_storage::MetaStore;
 use risingwave_pb::meta::SystemParams;
 use risingwave_rpc_client::{StreamClientPool, StreamClientPoolRef};
 
-use super::{SystemParamsManager, SystemParamsManagerRef};
-use crate::manager::{
+use super::{
     IdGeneratorManager, IdGeneratorManagerRef, IdleManager, IdleManagerRef, NotificationManager,
-    NotificationManagerRef,
+    NotificationManagerRef, SystemParamsManager, SystemParamsManagerRef,
 };
 use crate::MetaResult;
 

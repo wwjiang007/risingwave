@@ -41,6 +41,7 @@ mod barrier;
 mod dashboard;
 mod error;
 pub mod hummock;
+// make pub for hummock_test
 pub mod manager;
 mod rpc;
 pub(crate) mod serving;

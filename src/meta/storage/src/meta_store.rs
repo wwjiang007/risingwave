@@ -61,9 +61,3 @@ pub enum MetaStoreError {
 }
 
 pub type MetaStoreResult<T> = std::result::Result<T, MetaStoreError>;
-
-// impl From<MetaStoreError> for BackupError {
-//     fn from(e: MetaStoreError) -> Self {
-//         BackupError::MetaStorage(e.into())
-//     }
-// }

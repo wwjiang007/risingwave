@@ -27,6 +27,7 @@ use risingwave_connector::source::{
 };
 use risingwave_meta_model::{ActorId, FragmentId, TableFragments};
 use risingwave_meta_storage::MetaStore;
+use risingwave_meta_types::SplitAssignment;
 use risingwave_pb::catalog::Source;
 use risingwave_pb::connector_service::table_schema::Column;
 use risingwave_pb::connector_service::TableSchema;
@@ -42,9 +43,7 @@ use crate::rpc::metrics::MetaMetrics;
 use crate::MetaResult;
 
 pub type SourceManagerRef<S> = Arc<SourceManager<S>>;
-pub use risingwave_meta_model::stream::{
-    build_actor_connector_splits, build_actor_split_impls, SplitAssignment,
-};
+pub use risingwave_meta_model::stream::{build_actor_connector_splits, build_actor_split_impls};
 
 pub struct SourceManager<S: MetaStore> {
     pub(crate) paused: Mutex<()>,

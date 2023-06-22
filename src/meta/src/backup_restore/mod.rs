@@ -13,11 +13,11 @@
 // limitations under the License.
 
 mod backup_manager;
-pub use backup_manager::*;
-pub mod error;
+pub use backup_manager::{BackupManager, BackupManagerRef};
+mod error;
+pub use error::BackupResult;
 mod meta_snapshot_builder;
 mod metrics;
 mod restore;
+pub use restore::{restore, RestoreOpts};
 mod utils;
-
-pub use restore::*;

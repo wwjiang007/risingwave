@@ -46,7 +46,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use tracing::trace;
 use user::*;
 
-use crate::manager::{IdCategory, MetaSrvEnv, NotificationVersion, StreamingJob};
+use super::{IdCategory, MetaSrvEnv, NotificationVersion, StreamingJob};
 use crate::{MetaError, MetaResult};
 
 pub type DatabaseId = u32;
@@ -114,7 +114,7 @@ use risingwave_pb::meta::relation::RelationInfo;
 use risingwave_pb::meta::{CreatingJobInfo, Relation, RelationGroup};
 pub(crate) use {commit_meta, commit_meta_with_trx};
 
-use crate::manager::catalog::utils::{
+use super::catalog::utils::{
     alter_relation_rename, alter_relation_rename_refs, refcnt_dec_connection,
     refcnt_inc_connection, ReplaceTableExprRewriter,
 };

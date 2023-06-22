@@ -23,8 +23,10 @@ use risingwave_pb::catalog::{
     Connection, Database, Function, Index, Schema, Sink, Source, Table, View,
 };
 
-use super::{ConnectionId, DatabaseId, FunctionId, RelationId, SchemaId, SinkId, SourceId, ViewId};
-use crate::manager::{IndexId, MetaSrvEnv, TableId};
+use super::{
+    ConnectionId, DatabaseId, FunctionId, IndexId, MetaSrvEnv, RelationId, SchemaId, SinkId,
+    SourceId, TableId, ViewId,
+};
 use crate::{MetaError, MetaResult};
 
 pub type Catalog = (

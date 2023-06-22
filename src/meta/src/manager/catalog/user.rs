@@ -21,8 +21,7 @@ use risingwave_meta_storage::MetaStore;
 use risingwave_pb::user::UserInfo;
 
 use super::database::DatabaseManager;
-use super::UserId;
-use crate::manager::MetaSrvEnv;
+use super::{MetaSrvEnv, UserId};
 use crate::MetaResult;
 
 pub struct UserManager {
@@ -134,8 +133,7 @@ mod tests {
     use risingwave_pb::user::grant_privilege::{Action, ActionWithGrantOption, Object};
     use risingwave_pb::user::GrantPrivilege;
 
-    use super::*;
-    use crate::manager::{commit_meta, CatalogManager};
+    use super::super::{commit_meta, CatalogManager, *};
 
     fn make_test_user(id: u32, name: &str) -> UserInfo {
         UserInfo {

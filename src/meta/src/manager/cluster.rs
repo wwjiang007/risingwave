@@ -32,7 +32,7 @@ use tokio::sync::oneshot::Sender;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio::task::JoinHandle;
 
-use crate::manager::{IdCategory, LocalNotification, MetaSrvEnv};
+use super::{IdCategory, LocalNotification, MetaSrvEnv};
 use crate::{MetaError, MetaResult};
 
 pub type WorkerId = risingwave_meta_model::WorkerId;

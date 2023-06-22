@@ -29,7 +29,7 @@ use risingwave_pb::hummock::{HummockVersion, HummockVersionDelta, HummockVersion
 use risingwave_pb::meta::SystemParams;
 use risingwave_pb::user::UserInfo;
 
-use crate::backup_restore::error::{BackupError, BackupResult};
+use super::error::{BackupError, BackupResult};
 
 const VERSION: u32 = 1;
 
@@ -174,8 +174,8 @@ mod tests {
     use risingwave_meta_storage::{MemStore, MetaStore, DEFAULT_COLUMN_FAMILY};
     use risingwave_pb::hummock::{HummockVersion, HummockVersionStats};
 
-    use crate::backup_restore::error::BackupError;
-    use crate::backup_restore::meta_snapshot_builder::MetaSnapshotBuilder;
+    use super::super::error::BackupError;
+    use super::super::meta_snapshot_builder::MetaSnapshotBuilder;
 
     #[tokio::test]
     async fn test_snapshot_builder() {

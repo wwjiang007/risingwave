@@ -30,7 +30,7 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::sync::Mutex;
 use tonic::Status;
 
-use crate::manager::cluster::WorkerKey;
+use super::cluster::WorkerKey;
 
 pub type MessageStatus = Status;
 pub type Notification = Result<SubscribeResponse, Status>;

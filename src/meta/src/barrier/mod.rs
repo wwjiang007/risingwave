@@ -66,7 +66,9 @@ mod recovery;
 mod schedule;
 mod trace;
 
-pub use self::command::{Command, Reschedule};
+pub use risingwave_meta_types::barrier::Reschedule;
+
+pub use self::command::Command;
 pub use self::schedule::BarrierScheduler;
 pub use self::trace::TracedEpoch;
 

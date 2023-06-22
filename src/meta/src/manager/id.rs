@@ -21,7 +21,7 @@ use risingwave_meta_model::MetadataModelResult;
 use risingwave_meta_storage::{MetaStore, MetaStoreError, DEFAULT_COLUMN_FAMILY};
 use tokio::sync::RwLock;
 
-use crate::manager::cluster::META_NODE_ID;
+use super::cluster::META_NODE_ID;
 
 pub const ID_PREALLOCATE_INTERVAL: u64 = 1000;
 

@@ -27,8 +27,8 @@ use risingwave_object_store::object::object_metrics::ObjectStoreMetrics;
 use risingwave_object_store::object::parse_remote_object_store;
 use risingwave_pb::hummock::{HummockVersion, HummockVersionCheckpoint};
 
-use crate::backup_restore::error::{BackupError, BackupResult};
-use crate::backup_restore::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
+use super::error::{BackupError, BackupResult};
+use super::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
 use crate::dispatch_meta_store;
 
 /// Command-line arguments for restore.
@@ -295,9 +295,9 @@ mod tests {
     use risingwave_pb::hummock::HummockVersion;
     use risingwave_pb::meta::SystemParams;
 
-    use crate::backup_restore::restore::restore_impl;
-    use crate::backup_restore::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
-    use crate::backup_restore::RestoreOpts;
+    use super::super::restore::restore_impl;
+    use super::super::utils::{get_backup_store, get_meta_store, MetaStoreBackendImpl};
+    use super::super::RestoreOpts;
     use crate::dispatch_meta_store;
 
     fn get_restore_opts() -> RestoreOpts {

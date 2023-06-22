@@ -1,5 +1,5 @@
 [package]
-name = "risingwave_meta_types"
+name = "risingwave_meta_manager"
 version = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -14,14 +14,30 @@ ignored = ["workspace-hack"]
 normal = ["workspace-hack"]
 
 [dependencies]
-itertools = "0.10"
-risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
-risingwave_pb = { path = "../../prost" }
-risingwave_connector = { path = "../../connector" }
-risingwave_common = { path = "../../common" }
-risingwave_rpc_client = { path = "../../rpc_client" }
-etcd-client = { version = "0.2", package = "madsim-etcd-client" }
 
+anyhow = "1"
+async-trait = "0.1"
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+itertools = "0.10"
+memcomparable = { version = "0.2" }
+prost = "0.11"
+risingwave_common = { path = "../../common" }
+risingwave_connector = { path = "../../connector" }
+risingwave_hummock_sdk = { path = "../../storage/hummock_sdk" }
+risingwave_meta_storage = { path = "../storage" }
+risingwave_meta_types = { path = "../types" }
+risingwave_pb = { path = "../../prost" }
+thiserror = "1"
+tokio = { version = "0.2", package = "madsim-tokio", features = [
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "time",
+    "signal",
+] }
+tonic = { version = "0.2", package = "madsim-tonic" }
+uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(not(madsim))'.dependencies]
 axum = "0.6"
