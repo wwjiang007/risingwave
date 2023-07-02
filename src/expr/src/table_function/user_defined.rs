@@ -93,7 +93,7 @@ pub fn new_user_defined(prost: &PbTableFunction, chunk_size: usize) -> Result<Bo
             .try_collect()?,
     ));
     // connect to UDF service
-    let client = crate::expr::expr_udf::get_or_create_client(&udtf.link)?;
+    let client = crate::expr::expr_udf::get_or_create_flight_client(&udtf.link)?;
 
     Ok(UserDefinedTableFunction {
         children: prost.args.iter().map(expr_build_from_prost).try_collect()?,
