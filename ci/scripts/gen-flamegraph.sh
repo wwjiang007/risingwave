@@ -78,6 +78,8 @@ install_all() {
   echo ">>> Installing addr2line"
   git clone https://github.com/gimli-rs/addr2line
   pushd addr2line
+  git checkout 0.20.0
+  echo "nightly-2023-04-07" > rust-toolchain
   cargo b --examples -r
   mv ./target/release/examples/addr2line $(which addr2line)
   popd
@@ -93,8 +95,8 @@ install_all() {
   promql --version
 
   echo ">>> Installing Kafka"
-  wget https://downloads.apache.org/kafka/3.4.0/kafka_2.13-3.4.0.tgz
-  tar -zxvf kafka_2.13-3.4.0.tgz
+  wget https://downloads.apache.org/kafka/3.4.1/kafka_2.13-3.4.1.tgz
+  tar -zxvf kafka_2.13-3.4.1.tgz
 
   echo ">>> Installing nexmark bench"
   buildkite-agent artifact download nexmark-server /usr/local/bin
@@ -180,8 +182,8 @@ start_nperf() {
 }
 
 start_kafka() {
-  ./kafka_2.13-3.4.0/bin/zookeeper-server-start.sh ./kafka_2.13-3.4.0/config/zookeeper.properties > zookeeper.log 2>&1 &
-  ./kafka_2.13-3.4.0/bin/kafka-server-start.sh ./kafka_2.13-3.4.0/config/server.properties --override num.partitions=8 > kafka.log 2>&1 &
+  ./kafka_2.13-3.4.1/bin/zookeeper-server-start.sh ./kafka_2.13-3.4.1/config/zookeeper.properties > zookeeper.log 2>&1 &
+  ./kafka_2.13-3.4.1/bin/kafka-server-start.sh ./kafka_2.13-3.4.1/config/server.properties --override num.partitions=8 > kafka.log 2>&1 &
   sleep 10
   # TODO(kwannoel): `trap ERR` and upload these logs.
   # buildkite-agent artifact upload ./zookeeper.log
@@ -205,7 +207,7 @@ gen_events() {
 }
 
 show_kafka_topics() {
-  ./kafka_2.13-3.4.0/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --topic nexmark --bootstrap-server localhost:9092
+  ./kafka_2.13-3.4.1/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --topic nexmark --bootstrap-server localhost:9092
 }
 
 gen_cpu_flamegraph() {

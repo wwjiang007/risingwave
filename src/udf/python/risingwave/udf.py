@@ -35,7 +35,11 @@ class ScalarFunction(UserDefinedFunction):
 
     def __init__(self, *args, **kwargs):
         self._io_threads = kwargs.pop("io_threads")
-        self._executor = ThreadPoolExecutor(max_workers=self._io_threads) if self._io_threads is not None else None
+        self._executor = (
+            ThreadPoolExecutor(max_workers=self._io_threads)
+            if self._io_threads is not None
+            else None
+        )
         super().__init__(*args, **kwargs)
 
     def eval(self, *args) -> Any:
@@ -48,34 +52,54 @@ class ScalarFunction(UserDefinedFunction):
         # parse value from json string for jsonb columns
         inputs = [[v.as_py() for v in array] for array in batch]
         inputs = [
-            _process_input_array(array, type)
+            _process_func(pa.list_(type), False)(array)
             for array, type in zip(inputs, self._input_schema.types)
         ]
         if self._executor is not None:
             # evaluate the function for each row
-            tasks = [self._executor.submit(self._func, *[col[i] for col in inputs])
-                    for i in range(batch.num_rows)]
-            column = [future.result() for future in concurrent.futures.as_completed(tasks)]
+            tasks = [
+                self._executor.submit(self._func, *[col[i] for col in inputs])
+                for i in range(batch.num_rows)
+            ]
+            column = [
+                future.result() for future in concurrent.futures.as_completed(tasks)
+            ]
         else:
             # evaluate the function for each row
-            column = [self.eval(*[col[i] for col in inputs]) for i in range(batch.num_rows)]
+            column = [
+                self.eval(*[col[i] for col in inputs]) for i in range(batch.num_rows)
+            ]
 
-        # convert value to json for jsonb columns
-        if self._result_schema.types[0] == pa.large_string():
-            column = [(json.dumps(v) if v is not None else None) for v in column]
+        column = _process_func(pa.list_(self._result_schema.types[0]), True)(column)
+
         array = pa.array(column, type=self._result_schema.types[0])
         yield pa.RecordBatch.from_arrays([array], schema=self._result_schema)
 
 
-def _process_input_array(array: list, type: pa.DataType) -> list:
+def _process_func(type: pa.DataType, output: bool) -> Callable:
+    """Return a function to process input or output value."""
     if pa.types.is_list(type):
-        return [
-            (_process_input_array(v, type.value_type) if v is not None else None)
-            for v in array
-        ]
+        func = _process_func(type.value_type, output)
+        return lambda array: [(func(v) if v is not None else None) for v in array]
+    if pa.types.is_struct(type):
+        funcs = [_process_func(field.type, output) for field in type]
+        if output:
+            return lambda tup: tuple(
+                (func(v) if v is not None else None) for v, func in zip(tup, funcs)
+            )
+        else:
+            # the input value of struct type is a dict
+            # we convert it into tuple here
+            return lambda map: tuple(
+                (func(v) if v is not None else None)
+                for v, func in zip(map.values(), funcs)
+            )
     if pa.types.is_large_string(type):
-        return [(json.loads(v) if v is not None else None) for v in array]
-    return array
+        if output:
+            return lambda v: json.dumps(v)
+        else:
+            return lambda v: json.loads(v)
+    return lambda v: v
 
 
 class TableFunction(UserDefinedFunction):
@@ -107,11 +131,10 @@ class TableFunction(UserDefinedFunction):
                 """Returns the number of rows in the RecordBatch being built."""
                 return len(self.columns[0])
 
-            def append(self, index: int, args: Tuple):
+            def append(self, index: int, value: Any):
                 """Appends a new row to the RecordBatch being built."""
                 self.columns[0].append(index)
-                for column, val in zip(self.columns[1:], args):
-                    column.append(val)
+                self.columns[1].append(value)
 
             def build(self) -> pa.RecordBatch:
                 """Builds the RecordBatch from the accumulated data and clears the state."""
@@ -129,10 +152,8 @@ class TableFunction(UserDefinedFunction):
         # Iterate through rows in the input RecordBatch
         for row_index in range(batch.num_rows):
             row = tuple(column[row_index].as_py() for column in batch)
-            for result_row in self.eval(*row):
-                if not isinstance(result_row, tuple):
-                    result_row = (result_row,)
-                builder.append(row_index, result_row)
+            for result in self.eval(*row):
+                builder.append(row_index, result)
                 if builder.len() == self.BATCH_SIZE:
                     yield builder.build()
         if builder.len() != 0:
@@ -166,6 +187,7 @@ class UserDefinedScalarFunctionWrapper(ScalarFunction):
     def eval(self, *args):
         return self._func(*args)
 
+
 class UserDefinedTableFunctionWrapper(TableFunction):
     """
     Base Wrapper for Python user-defined table function.
@@ -175,6 +197,9 @@ class UserDefinedTableFunctionWrapper(TableFunction):
 
     def __init__(self, func, input_types, result_types, name=None):
         self._func = func
+        self._name = name or (
+            func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
+        )
         self._input_schema = pa.schema(
             zip(
                 inspect.getfullargspec(func)[0],
@@ -182,11 +207,15 @@ class UserDefinedTableFunctionWrapper(TableFunction):
             )
         )
         self._result_schema = pa.schema(
-            [("row_index", pa.int64())]
-            + [("", _to_data_type(t)) for t in _to_list(result_types)]
-        )
-        self._name = name or (
-            func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
+            [
+                ("row_index", pa.int32()),
+                (
+                    self._name,
+                    pa.struct([("", _to_data_type(t)) for t in result_types])
+                    if isinstance(result_types, list)
+                    else _to_data_type(result_types),
+                ),
+            ]
         )
 
     def __call__(self, *args):
@@ -194,6 +223,7 @@ class UserDefinedTableFunctionWrapper(TableFunction):
 
     def eval(self, *args):
         return self._func(*args)
+
 
 def _to_list(x):
     if isinstance(x, list):
@@ -236,9 +266,13 @@ def udf(
     """
 
     if io_threads is not None and io_threads > 1:
-        return lambda f: UserDefinedScalarFunctionWrapper(f, input_types, result_type, name, io_threads=io_threads)
+        return lambda f: UserDefinedScalarFunctionWrapper(
+            f, input_types, result_type, name, io_threads=io_threads
+        )
     else:
-        return lambda f: UserDefinedScalarFunctionWrapper(f, input_types, result_type, name)
+        return lambda f: UserDefinedScalarFunctionWrapper(
+            f, input_types, result_type, name
+        )
 
 
 def udtf(
@@ -355,15 +389,22 @@ def _string_to_data_type(type_str: str):
     elif type_str in ("FLOAT8", "DOUBLE PRECISION"):
         return pa.float64()
     elif type_str.startswith("DECIMAL") or type_str.startswith("NUMERIC"):
-        return pa.decimal128(28)
+        if type_str == "DECIMAL" or type_str == "NUMERIC":
+            return pa.decimal128(38)
+        rest = type_str[8:-1]  # remove "DECIMAL(" and ")"
+        if "," in rest:
+            precision, scale = rest.split(",")
+            return pa.decimal128(int(precision), int(scale))
+        else:
+            return pa.decimal128(int(rest), 0)
     elif type_str in ("DATE"):
         return pa.date32()
     elif type_str in ("TIME", "TIME WITHOUT TIME ZONE"):
-        return pa.time32("ms")
+        return pa.time64("us")
     elif type_str in ("TIMESTAMP", "TIMESTAMP WITHOUT TIME ZONE"):
-        return pa.timestamp("ms")
+        return pa.timestamp("us")
     elif type_str.startswith("INTERVAL"):
-        return pa.duration("us")
+        return pa.month_day_nano_interval()
     elif type_str in ("VARCHAR"):
         return pa.string()
     elif type_str in ("JSONB"):

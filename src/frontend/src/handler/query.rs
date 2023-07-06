@@ -275,12 +275,12 @@ fn gen_batch_plan_fragmenter(
 
     tracing::trace!(
         "Generated query plan: {:?}, query_mode:{:?}",
-        plan.explain_to_string()?,
+        plan.explain_to_string(),
         query_mode
     );
     let worker_node_manager_reader = WorkerNodeSelector::new(
         session.env().worker_node_manager_ref(),
-        !session.config().only_checkpoint_visible(),
+        session.is_barrier_read(),
     );
     let plan_fragmenter = BatchPlanFragmenter::new(
         worker_node_manager_reader,
@@ -311,7 +311,7 @@ async fn execute(
         ..
     } = plan_fragmenter_result;
 
-    let only_checkpoint_visible = session.config().only_checkpoint_visible();
+    let is_barrier_read = session.is_barrier_read();
     let query_start_time = Instant::now();
     let query = plan_fragmenter.generate_complete_query().await?;
     tracing::trace!("Generated query after plan fragmenter: {:?}", &query);
@@ -336,7 +336,7 @@ async fn execute(
             let hummock_snapshot_manager = session.env().hummock_snapshot_manager();
             let query_id = query.query_id().clone();
             let pinned_snapshot = hummock_snapshot_manager.acquire(&query_id).await?;
-            PinnedHummockSnapshot::FrontendPinned(pinned_snapshot, only_checkpoint_visible)
+            PinnedHummockSnapshot::FrontendPinned(pinned_snapshot, is_barrier_read)
         };
         match query_mode {
             QueryMode::Auto => unreachable!(),
@@ -358,7 +358,7 @@ async fn execute(
         }
     };
 
-    let rows_count: Option<i32> = match stmt_type {
+    let row_cnt: Option<i32> = match stmt_type {
         StatementType::SELECT
         | StatementType::INSERT_RETURNING
         | StatementType::DELETE_RETURNING
@@ -384,7 +384,7 @@ async fn execute(
                     i64::from_sql(&postgres_types::Type::INT8, affected_rows_str)
                         .unwrap()
                         .try_into()
-                        .expect("affected rows count large than i32"),
+                        .expect("affected rows count large than i64"),
                 )
             } else {
                 Some(
@@ -442,14 +442,11 @@ async fn execute(
         Ok(())
     };
 
-    Ok(PgResponse::new_for_stream_extra(
-        stmt_type,
-        rows_count,
-        row_stream,
-        pg_descs,
-        vec![],
-        callback,
-    ))
+    Ok(PgResponse::builder(stmt_type)
+        .row_cnt_opt(row_cnt)
+        .values(row_stream, pg_descs)
+        .callback(callback)
+        .into())
 }
 
 async fn distribute_execute(

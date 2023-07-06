@@ -51,13 +51,39 @@ public class PostgresValidator extends DatabaseValidator implements AutoCloseabl
     @Override
     public void validateDbConfig() {
         // TODO: check database server version
-        // check whether source db has enabled wal
         try (var stmt = jdbcConnection.createStatement()) {
+            // check whether wal has been enabled
             var res = stmt.executeQuery(ValidatorUtils.getSql("postgres.wal"));
             while (res.next()) {
                 if (!res.getString(1).equals("logical")) {
                     throw ValidatorUtils.invalidArgument(
                             "Postgres wal_level should be 'logical'.\nPlease modify the config and restart your Postgres server.");
+                }
+            }
+        } catch (SQLException e) {
+            throw ValidatorUtils.internalError(e);
+        }
+
+        try (var stmt =
+                jdbcConnection.prepareStatement(ValidatorUtils.getSql("postgres.slot.check"))) {
+            // check whether the replication slot is already existed
+            var slotName = userProps.get(DbzConnectorConfig.PG_SLOT_NAME);
+            var dbName = userProps.get(DbzConnectorConfig.DB_NAME);
+            stmt.setString(1, slotName);
+            stmt.setString(2, dbName);
+            var res = stmt.executeQuery();
+            if (res.next() && res.getString(1).equals(slotName)) {
+                LOG.info("replication slot '{}' already exists, just use it", slotName);
+            } else {
+                // otherwise, we need to create a new one
+                var stmt2 =
+                        jdbcConnection.prepareStatement(
+                                ValidatorUtils.getSql("postgres.slot_limit.check"));
+                var res2 = stmt2.executeQuery();
+                // check whether the number of replication slots reaches the max limit
+                if (res2.next() && res2.getString(1).equals("true")) {
+                    throw ValidatorUtils.failedPrecondition(
+                            "all replication slots are in use\n Hint: Free one or increase max_replication_slots.");
                 }
             }
         } catch (SQLException e) {
@@ -132,29 +158,32 @@ public class PostgresValidator extends DatabaseValidator implements AutoCloseabl
                 throw ValidatorUtils.invalidArgument("Primary key mismatch");
             }
         }
-        // check whether source schema match table schema on upstream
+
+        // Check whether source schema match table schema on upstream
+        // All columns defined must exist in upstream database
         try (var stmt =
                 jdbcConnection.prepareStatement(ValidatorUtils.getSql("postgres.table_schema"))) {
             stmt.setString(1, schemaName);
             stmt.setString(2, tableName);
             var res = stmt.executeQuery();
-            int index = 0;
+
+            // Field names in lower case -> data type
+            Map<String, String> schema = new HashMap<>();
             while (res.next()) {
                 var field = res.getString(1);
                 var dataType = res.getString(2);
-                if (index >= tableSchema.getNumColumns()) {
-                    throw ValidatorUtils.invalidArgument("The number of columns mismatch");
-                }
+                schema.put(field.toLowerCase(), dataType);
+            }
 
-                var srcColName = tableSchema.getColumnNames()[index++];
-                if (!srcColName.equalsIgnoreCase(field)) {
+            for (var e : tableSchema.getColumnTypes().entrySet()) {
+                var pgDataType = schema.get(e.getKey().toLowerCase());
+                if (pgDataType == null) {
                     throw ValidatorUtils.invalidArgument(
-                            "table column defined in the source mismatches upstream column "
-                                    + field);
+                            "Column '" + e.getKey() + "' not found in the upstream database");
                 }
-                if (!isDataTypeCompatible(dataType, tableSchema.getColumnType(srcColName))) {
+                if (!isDataTypeCompatible(pgDataType, e.getValue())) {
                     throw ValidatorUtils.invalidArgument(
-                            "incompatible data type of column " + srcColName);
+                            "Incompatible data type of column " + e.getKey());
                 }
             }
         }
@@ -303,7 +332,11 @@ public class PostgresValidator extends DatabaseValidator implements AutoCloseabl
                     stmt.setString(1, tableOwner);
                     var res = stmt.executeQuery();
                     while (res.next()) {
-                        String[] users = (String[]) res.getArray("members").getArray();
+                        var usersArray = res.getArray("members");
+                        if (usersArray == null) {
+                            break;
+                        }
+                        String[] users = (String[]) usersArray.getArray();
                         if (null != users
                                 && Arrays.asList(users)
                                         .contains(userProps.get(DbzConnectorConfig.USER))) {

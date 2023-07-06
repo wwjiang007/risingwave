@@ -22,7 +22,7 @@ use bytes::{Buf, BufMut};
 use either::Either;
 use itertools::Itertools;
 use risingwave_pb::data::{ListArrayData, PbArray, PbArrayType};
-use serde::{Deserializer, Serializer};
+use serde::{Deserialize, Serializer};
 
 use super::{Array, ArrayBuilder, ArrayBuilderImpl, ArrayImpl, ArrayResult, RowRef};
 use crate::buffer::{Bitmap, BitmapBuilder};
@@ -113,7 +113,7 @@ impl ArrayBuilder for ListArrayBuilder {
                             .expect("offset overflow"),
                     );
                     for elem in elems {
-                        self.value.append_datum(elem);
+                        self.value.append(elem);
                     }
                 }
             }
@@ -163,7 +163,7 @@ impl ListArrayBuilder {
             .push(last.checked_add(row.len() as u32).expect("offset overflow"));
         self.len += 1;
         for v in row.iter() {
-            self.value.append_datum(v);
+            self.value.append(v);
         }
     }
 }
@@ -280,7 +280,7 @@ impl ListArray {
 
         let mut offsets = vec![0u32];
         offsets.reserve(size_hint);
-        let mut builder = ArrayBuilderImpl::from_type(&value_type, size_hint);
+        let mut builder = ArrayBuilderImpl::with_type(size_hint, value_type.clone());
         let mut bitmap = BitmapBuilder::with_capacity(size_hint);
         for v in values {
             bitmap.append(v.is_some());
@@ -383,25 +383,7 @@ impl ListValue {
         datatype: &DataType,
         deserializer: &mut memcomparable::Deserializer<impl Buf>,
     ) -> memcomparable::Result<Self> {
-        // This is a bit dirty, but idk how to correctly deserialize bytes in memcomparable
-        // format without this...
-        struct Visitor<'a>(&'a DataType);
-        impl<'a> serde::de::Visitor<'a> for Visitor<'a> {
-            type Value = Vec<u8>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(formatter, "a list of {}", self.0)
-            }
-
-            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(v)
-            }
-        }
-        let visitor = Visitor(datatype);
-        let bytes = deserializer.deserialize_byte_buf(visitor)?;
+        let bytes = serde_bytes::ByteBuf::deserialize(deserializer)?;
         let mut inner_deserializer = memcomparable::Deserializer::new(bytes.as_slice());
         let mut values = Vec::new();
         while inner_deserializer.has_remaining() {
@@ -434,7 +416,9 @@ impl<'a> ListRef<'a> {
         self.len() == 0
     }
 
+    /// Returns the elements in the flattened list.
     pub fn flatten(self) -> Vec<DatumRef<'a>> {
+        // XXX: avoid using vector
         iter_elems_ref!(self, it, {
             it.flat_map(|datum_ref| {
                 if let Some(ScalarRefImpl::List(list_ref)) = datum_ref {
@@ -445,6 +429,20 @@ impl<'a> ListRef<'a> {
                 .into_iter()
             })
             .collect()
+        })
+    }
+
+    /// Returns the total number of elements in the flattened list.
+    pub fn flatten_len(self) -> usize {
+        iter_elems_ref!(self, it, {
+            it.map(|datum_ref| {
+                if let Some(ScalarRefImpl::List(list_ref)) = datum_ref {
+                    list_ref.flatten_len()
+                } else {
+                    1
+                }
+            })
+            .sum()
         })
     }
 

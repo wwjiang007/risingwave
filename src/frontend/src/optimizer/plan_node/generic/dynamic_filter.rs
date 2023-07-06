@@ -15,6 +15,7 @@
 use std::fmt;
 
 use fixedbitset::FixedBitSet;
+use pretty_xmlish::Pretty;
 use risingwave_common::catalog::Schema;
 use risingwave_common::util::sort_util::OrderType;
 pub use risingwave_pb::expr::expr_node::Type as ExprType;
@@ -122,20 +123,32 @@ impl<PlanRef: GenericPlanRef> DynamicFilter<PlanRef> {
         watermark_columns
     }
 
-    pub fn fmt_fields_with_builder(&self, builder: &mut fmt::DebugStruct<'_, '_>) {
+    fn condition_display(&self) -> (Condition, Schema) {
         let mut concat_schema = self.left.schema().fields.clone();
         concat_schema.extend(self.right.schema().fields.clone());
         let concat_schema = Schema::new(concat_schema);
 
         let predicate = self.predicate();
+        (predicate, concat_schema)
+    }
 
+    pub fn fmt_fields_with_builder(&self, builder: &mut fmt::DebugStruct<'_, '_>) {
+        let (condition, input_schema) = &self.condition_display();
         builder.field(
             "predicate",
             &ConditionDisplay {
-                condition: &predicate,
-                input_schema: &concat_schema,
+                condition,
+                input_schema,
             },
         );
+    }
+
+    pub fn pretty_field<'a>(&self) -> Pretty<'a> {
+        let (condition, input_schema) = &self.condition_display();
+        Pretty::debug(&ConditionDisplay {
+            condition,
+            input_schema,
+        })
     }
 }
 

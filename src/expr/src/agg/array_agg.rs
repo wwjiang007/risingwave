@@ -12,14 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use risingwave_common::array::ListValue;
+use risingwave_common::estimate_size::EstimateSize;
 use risingwave_common::types::{Datum, ScalarRef};
 use risingwave_expr_macro::aggregate;
 
-#[aggregate("array_agg(*) -> list", state = "Vec<Datum>")]
-fn array_agg<'a, T: ScalarRef<'a>>(state: Option<Vec<Datum>>, value: Option<T>) -> Vec<Datum> {
+#[aggregate("array_agg(*) -> list", state = "State")]
+fn array_agg<'a, T: ScalarRef<'a>>(state: Option<State>, value: Option<T>) -> State {
     let mut state = state.unwrap_or_default();
-    state.push(value.map(|v| v.to_owned_scalar().into()));
+    state.0.push(value.map(|v| v.to_owned_scalar().into()));
     state
+}
+
+#[derive(Default, Clone)]
+struct State(Vec<Datum>);
+
+impl EstimateSize for State {
+    fn estimated_heap_size(&self) -> usize {
+        std::mem::size_of::<Datum>() * self.0.capacity()
+    }
+}
+
+impl From<State> for ListValue {
+    fn from(state: State) -> Self {
+        ListValue::new(state.0)
+    }
 }
 
 #[cfg(test)]
@@ -28,9 +45,8 @@ mod tests {
     use risingwave_common::array::{Array, DataChunk, ListValue};
     use risingwave_common::test_prelude::DataChunkTestExt;
     use risingwave_common::types::{DataType, ScalarRef};
-    use risingwave_common::util::sort_util::{ColumnOrder, OrderType};
 
-    use crate::agg::{AggArgs, AggCall, AggKind};
+    use crate::agg::AggCall;
     use crate::Result;
 
     #[tokio::test]
@@ -42,14 +58,7 @@ mod tests {
              789",
         );
         let return_type = DataType::List(Box::new(DataType::Int32));
-        let mut agg = crate::agg::build(AggCall {
-            kind: AggKind::ArrayAgg,
-            args: AggArgs::Unary(DataType::Int32, 0),
-            return_type: return_type.clone(),
-            column_orders: vec![],
-            filter: None,
-            distinct: false,
-        })?;
+        let mut agg = crate::agg::build(AggCall::from_pretty("(array_agg:int4[] $0:int4)"))?;
         let mut builder = return_type.create_array_builder(0);
         agg.update_multi(&chunk, 0, chunk.cardinality()).await?;
         agg.output(&mut builder)?;
@@ -73,14 +82,7 @@ mod tests {
     #[tokio::test]
     async fn test_array_agg_empty() -> Result<()> {
         let return_type = DataType::List(Box::new(DataType::Int32));
-        let mut agg = crate::agg::build(AggCall {
-            kind: AggKind::ArrayAgg,
-            args: AggArgs::Unary(DataType::Int32, 0),
-            return_type: return_type.clone(),
-            column_orders: vec![],
-            filter: None,
-            distinct: false,
-        })?;
+        let mut agg = crate::agg::build(AggCall::from_pretty("(array_agg:int4[] $0:int4)"))?;
         let mut builder = return_type.create_array_builder(0);
         agg.output(&mut builder)?;
 
@@ -120,17 +122,9 @@ mod tests {
              321  9",
         );
         let return_type = DataType::List(Box::new(DataType::Int32));
-        let mut agg = crate::agg::build(AggCall {
-            kind: AggKind::ArrayAgg,
-            args: AggArgs::Unary(DataType::Int32, 0),
-            return_type: return_type.clone(),
-            column_orders: vec![
-                ColumnOrder::new(1, OrderType::ascending()),
-                ColumnOrder::new(0, OrderType::descending()),
-            ],
-            filter: None,
-            distinct: false,
-        })?;
+        let mut agg = crate::agg::build(AggCall::from_pretty(
+            "(array_agg:int4[] $0:int4 orderby $1:asc $0:desc)",
+        ))?;
         let mut builder = return_type.create_array_builder(0);
         agg.update_multi(&chunk, 0, chunk.cardinality()).await?;
         agg.output(&mut builder)?;

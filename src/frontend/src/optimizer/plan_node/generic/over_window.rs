@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt;
-
 use itertools::Itertools;
+use pretty_xmlish::{Pretty, Str, XmlNode};
 use risingwave_common::catalog::{Field, Schema};
 use risingwave_common::types::DataType;
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
@@ -22,8 +21,9 @@ use risingwave_common::util::sort_util::{ColumnOrder, ColumnOrderDisplay};
 use risingwave_expr::function::window::{Frame, WindowFuncKind};
 use risingwave_pb::expr::PbWindowFunction;
 
-use super::{GenericPlanNode, GenericPlanRef};
+use super::{DistillUnit, GenericPlanNode, GenericPlanRef};
 use crate::expr::{InputRef, InputRefDisplay};
+use crate::optimizer::plan_node::utils::childless_record;
 use crate::optimizer::property::FunctionalDependencySet;
 use crate::utils::ColIndexMappingRewriteExt;
 use crate::OptimizerContextRef;
@@ -160,21 +160,23 @@ impl<PlanRef: GenericPlanRef> OverWindow<PlanRef> {
             .map(|f| (&f.partition_by, &f.order_by))
             .all_equal()
     }
+
+    pub fn has_rank_function(&self) -> bool {
+        self.window_functions.iter().any(|f| f.kind.is_rank())
+    }
 }
 
-impl<PlanRef: GenericPlanRef> OverWindow<PlanRef> {
-    pub(crate) fn fmt_with_name(&self, f: &mut fmt::Formatter<'_>, name: &str) -> fmt::Result {
-        let mut builder = f.debug_struct(name);
-        let window_funcs_display = self
-            .window_functions
-            .iter()
-            .map(|func| PlanWindowFunctionDisplay {
+impl<PlanRef: GenericPlanRef> DistillUnit for OverWindow<PlanRef> {
+    fn distill_with_name<'a>(&self, name: impl Into<Str<'a>>) -> XmlNode<'a> {
+        let f = |func| {
+            Pretty::debug(&PlanWindowFunctionDisplay {
                 window_function: func,
                 input_schema: self.input.schema(),
             })
-            .collect::<Vec<_>>();
-        builder.field("window_functions", &window_funcs_display);
-        builder.finish()
+        };
+        let wf = Pretty::Array(self.window_functions.iter().map(f).collect());
+        let vec = vec![("window_functions", wf)];
+        childless_record(name, vec)
     }
 }
 
@@ -198,7 +200,17 @@ impl<PlanRef: GenericPlanRef> GenericPlanNode for OverWindow<PlanRef> {
     }
 
     fn logical_pk(&self) -> Option<Vec<usize>> {
-        Some(self.input.logical_pk().to_vec())
+        let mut output_pk = self.input.logical_pk().to_vec();
+        for part_key_idx in self
+            .window_functions
+            .iter()
+            .flat_map(|f| f.partition_by.iter().map(|i| i.index))
+        {
+            if !output_pk.contains(&part_key_idx) {
+                output_pk.push(part_key_idx);
+            }
+        }
+        Some(output_pk)
     }
 
     fn ctx(&self) -> OptimizerContextRef {

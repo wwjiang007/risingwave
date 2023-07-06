@@ -43,6 +43,7 @@ pub struct StreamingMetrics {
     pub actor_sampled_deserialize_duration_ns: GenericCounterVec<AtomicU64>,
     pub source_output_row_count: GenericCounterVec<AtomicU64>,
     pub source_row_per_barrier: GenericCounterVec<AtomicU64>,
+    pub source_split_change_count: GenericCounterVec<AtomicU64>,
 
     // Exchange (see also `compute::ExchangeServiceMetrics`)
     pub exchange_frag_recv_size: GenericCounterVec<AtomicU64>,
@@ -99,14 +100,13 @@ pub struct StreamingMetrics {
 
     pub sink_commit_duration: HistogramVec,
 
-    pub sink_output_row_count: GenericCounterVec<AtomicU64>,
-
     // Memory management
     // FIXME(yuhao): use u64 here
     pub lru_current_watermark_time_ms: IntGauge,
     pub lru_physical_now_ms: IntGauge,
     pub lru_runtime_loop_count: IntCounter,
     pub lru_watermark_step: IntGauge,
+    pub lru_evicted_watermark_time_diff_ms: GenericGaugeVec<AtomicI64>,
     pub jemalloc_allocated_bytes: IntGauge,
     pub jemalloc_active_bytes: IntGauge,
 
@@ -116,6 +116,9 @@ pub struct StreamingMetrics {
     // Materialize
     pub materialize_cache_hit_count: GenericCounterVec<AtomicU64>,
     pub materialize_cache_total_count: GenericCounterVec<AtomicU64>,
+
+    // Memory
+    pub stream_memory_usage: GenericGaugeVec<AtomicI64>,
 }
 
 impl StreamingMetrics {
@@ -123,7 +126,7 @@ impl StreamingMetrics {
         let executor_row_count = register_int_counter_vec_with_registry!(
             "stream_executor_row_count",
             "Total number of rows that have been output from each executor",
-            &["actor_id", "executor_id"],
+            &["actor_id", "executor_identity"],
             registry
         )
         .unwrap();
@@ -131,7 +134,7 @@ impl StreamingMetrics {
         let source_output_row_count = register_int_counter_vec_with_registry!(
             "stream_source_output_rows_counts",
             "Total number of rows that have been output from source",
-            &["source_id", "source_name"],
+            &["source_id", "source_name", "actor_id"],
             registry
         )
         .unwrap();
@@ -140,6 +143,14 @@ impl StreamingMetrics {
             "stream_source_rows_per_barrier_counts",
             "Total number of rows that have been output from source per barrier",
             &["actor_id", "executor_id"],
+            registry
+        )
+        .unwrap();
+
+        let source_split_change_count = register_int_counter_vec_with_registry!(
+            "stream_source_split_change_event_count",
+            "Total number of split change events that have been operated by source",
+            &["source_id", "source_name", "actor_id"],
             registry
         )
         .unwrap();
@@ -559,14 +570,6 @@ impl StreamingMetrics {
         )
         .unwrap();
 
-        let sink_output_row_count = register_int_counter_vec_with_registry!(
-            "stream_sink_output_rows_counts",
-            "Total number of rows that have been output to sink",
-            &["sink_id", "sink_name"],
-            registry
-        )
-        .unwrap();
-
         let lru_current_watermark_time_ms = register_int_gauge_with_registry!(
             "lru_current_watermark_time_ms",
             "Current LRU manager watermark time(ms)",
@@ -591,6 +594,14 @@ impl StreamingMetrics {
         let lru_watermark_step = register_int_gauge_with_registry!(
             "lru_watermark_step",
             "The steps increase in 1 loop",
+            registry
+        )
+        .unwrap();
+
+        let lru_evicted_watermark_time_diff_ms = register_int_gauge_vec_with_registry!(
+            "lru_evicted_watermark_time_diff_ms",
+            "The diff between current watermark and latest evicted watermark time by actors",
+            &["table_id", "actor_id", "desc"],
             registry
         )
         .unwrap();
@@ -632,6 +643,15 @@ impl StreamingMetrics {
             registry
         )
         .unwrap();
+
+        let stream_memory_usage = register_int_gauge_vec_with_registry!(
+            "stream_memory_usage",
+            "Memory usage for stream executors",
+            &["table_id", "actor_id", "desc"],
+            registry
+        )
+        .unwrap();
+
         Self {
             registry,
             executor_row_count,
@@ -654,6 +674,7 @@ impl StreamingMetrics {
             actor_sampled_deserialize_duration_ns,
             source_output_row_count,
             source_row_per_barrier,
+            source_split_change_count,
             exchange_frag_recv_size,
             join_lookup_miss_count,
             join_total_lookup_count,
@@ -689,16 +710,17 @@ impl StreamingMetrics {
             barrier_inflight_latency,
             barrier_sync_latency,
             sink_commit_duration,
-            sink_output_row_count,
             lru_current_watermark_time_ms,
             lru_physical_now_ms,
             lru_runtime_loop_count,
             lru_watermark_step,
+            lru_evicted_watermark_time_diff_ms,
             jemalloc_allocated_bytes,
             jemalloc_active_bytes,
             user_compute_error_count,
             materialize_cache_hit_count,
             materialize_cache_total_count,
+            stream_memory_usage,
         }
     }
 

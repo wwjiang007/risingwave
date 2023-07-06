@@ -33,6 +33,7 @@ use risingwave_storage::StateStore;
 
 use super::{Barrier, Executor, Message, MessageStream, StreamExecutorError, StreamExecutorResult};
 use crate::cache::{cache_may_stale, new_with_hasher_in, ManagedLruCache};
+use crate::common::metrics::MetricsInfo;
 use crate::common::StreamChunkBuilder;
 use crate::executor::monitor::StreamingMetrics;
 use crate::executor::{ActorContextRef, BoxedExecutor, JoinType, JoinTypePrimitive, PkIndices};
@@ -122,7 +123,7 @@ pub async fn chunks_until_barrier(stream: impl MessageStream, expected_barrier: 
     for item in stream {
         match item? {
             Message::Watermark(_) => {
-                todo!("https://github.com/risingwavelabs/risingwave/issues/6042")
+                // TODO: https://github.com/risingwavelabs/risingwave/issues/6042
             }
             Message::Chunk(c) => yield c,
             Message::Barrier(b) if b.epoch != expected_barrier.epoch => {
@@ -174,7 +175,9 @@ async fn align_input(left: Box<dyn Executor>, right: Box<dyn Executor>) {
                 Some(
                     Either::Left(Ok(Message::Watermark(_)))
                     | Either::Right(Ok(Message::Watermark(_))),
-                ) => todo!("https://github.com/risingwavelabs/risingwave/issues/6042"),
+                ) => {
+                    // TODO: https://github.com/risingwavelabs/risingwave/issues/6042
+                }
                 None => return Ok(()),
             }
         }
@@ -209,7 +212,19 @@ impl<S: StateStore, const T: JoinTypePrimitive> TemporalJoinExecutor<S, T> {
 
         let alloc = StatsAlloc::new(Global).shared();
 
-        let cache = new_with_hasher_in(watermark_epoch, DefaultHasher::default(), alloc);
+        let metrics_info = MetricsInfo::new(
+            metrics.clone(),
+            table.table_id().table_id,
+            ctx.id,
+            "temporal join",
+        );
+
+        let cache = new_with_hasher_in(
+            watermark_epoch,
+            metrics_info,
+            DefaultHasher::default(),
+            alloc,
+        );
 
         Self {
             ctx: ctx.clone(),

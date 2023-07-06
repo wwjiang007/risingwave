@@ -25,7 +25,7 @@ use crate::util::value_encoding::deserialize_datum;
 
 /// An owned row type with a `Vec<Datum>`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct OwnedRow(Vec<Datum>);
+pub struct OwnedRow(Box<[Datum]>);
 
 /// Do not implement `IndexMut` to make it immutable.
 impl std::ops::Index<usize> for OwnedRow {
@@ -46,16 +46,16 @@ impl OwnedRow {
     /// Returns an empty row.
     ///
     /// Note: use [`empty`](super::empty) if possible.
-    pub const fn empty() -> Self {
-        Self(vec![])
+    pub fn empty() -> Self {
+        Self(Box::new([]))
     }
 
-    pub const fn new(values: Vec<Datum>) -> Self {
-        Self(values)
+    pub fn new(values: Vec<Datum>) -> Self {
+        Self(values.into())
     }
 
-    /// Retrieve the underlying [`Vec<Datum>`].
-    pub fn into_inner(self) -> Vec<Datum> {
+    /// Retrieve the underlying [`Box<[Datum]>`].
+    pub fn into_inner(self) -> Box<[Datum]> {
         self.0
     }
 
@@ -94,15 +94,11 @@ impl OwnedRow {
 impl EstimateSize for OwnedRow {
     fn estimated_heap_size(&self) -> usize {
         let data_heap_size: usize = self.0.iter().map(|datum| datum.estimated_heap_size()).sum();
-        self.0.capacity() * mem::size_of::<Datum>() + data_heap_size
+        self.0.len() * mem::size_of::<Datum>() + data_heap_size
     }
 }
 
 impl Row for OwnedRow {
-    type Iter<'a> = std::iter::Map<std::slice::Iter<'a, Datum>, fn(&'a Datum) -> DatumRef<'a>>
-    where
-        Self: 'a;
-
     #[inline]
     fn datum_at(&self, index: usize) -> DatumRef<'_> {
         self[index].to_datum_ref()
@@ -119,7 +115,7 @@ impl Row for OwnedRow {
     }
 
     #[inline]
-    fn iter(&self) -> Self::Iter<'_> {
+    fn iter(&self) -> impl ExactSizeIterator<Item = DatumRef<'_>> {
         self.0.iter().map(ToDatumRef::to_datum_ref)
     }
 
@@ -131,6 +127,21 @@ impl Row for OwnedRow {
     #[inline]
     fn into_owned_row(self) -> OwnedRow {
         self
+    }
+}
+
+impl IntoIterator for OwnedRow {
+    type IntoIter = std::vec::IntoIter<Datum>;
+    type Item = Datum;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_vec().into_iter()
+    }
+}
+
+impl FromIterator<Datum> for OwnedRow {
+    fn from_iter<T: IntoIterator<Item = Datum>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -152,7 +163,7 @@ impl<D: AsRef<[DataType]>> RowDeserializer<D> {
         for typ in self.data_types() {
             values.push(deserialize_datum(&mut data, typ)?);
         }
-        Ok(OwnedRow(values))
+        Ok(OwnedRow(values.into()))
     }
 
     pub fn data_types(&self) -> &[DataType] {

@@ -200,6 +200,10 @@ impl ObjectName {
             .collect::<Vec<_>>()
             .join(".")
     }
+
+    pub fn from_test_str(s: &str) -> Self {
+        ObjectName::from(vec![s.into()])
+    }
 }
 
 impl fmt::Display for ObjectName {
@@ -278,6 +282,10 @@ pub enum Expr {
     IsFalse(Box<Expr>),
     /// `IS NOT FALSE` operator
     IsNotFalse(Box<Expr>),
+    /// `IS UNKNOWN` operator
+    IsUnknown(Box<Expr>),
+    /// `IS NOT UNKNOWN` operator
+    IsNotUnknown(Box<Expr>),
     /// `IS DISTINCT FROM` operator
     IsDistinctFrom(Box<Expr>, Box<Expr>),
     /// `IS NOT DISTINCT FROM` operator
@@ -427,6 +435,8 @@ impl fmt::Display for Expr {
             Expr::IsNotTrue(ast) => write!(f, "{} IS NOT TRUE", ast),
             Expr::IsFalse(ast) => write!(f, "{} IS FALSE", ast),
             Expr::IsNotFalse(ast) => write!(f, "{} IS NOT FALSE", ast),
+            Expr::IsUnknown(ast) => write!(f, "{} IS UNKNOWN", ast),
+            Expr::IsNotUnknown(ast) => write!(f, "{} IS NOT UNKNOWN", ast),
             Expr::InList {
                 expr,
                 list,
@@ -788,6 +798,7 @@ pub enum ShowObject {
     Connection { schema: Option<Ident> },
     Function { schema: Option<Ident> },
     Indexes { table: ObjectName },
+    Cluster,
 }
 
 impl fmt::Display for ShowObject {
@@ -821,6 +832,9 @@ impl fmt::Display for ShowObject {
             ShowObject::Connection { schema } => write!(f, "CONNECTIONS{}", fmt_schema(schema)),
             ShowObject::Function { schema } => write!(f, "FUNCTIONS{}", fmt_schema(schema)),
             ShowObject::Indexes { table } => write!(f, "INDEXES FROM {}", table),
+            ShowObject::Cluster => {
+                write!(f, "CLUSTERS")
+            }
         }
     }
 }
@@ -979,6 +993,7 @@ pub enum Statement {
     CreateView {
         or_replace: bool,
         materialized: bool,
+        if_not_exists: bool,
         /// View name
         name: ObjectName,
         columns: Vec<Ident>,
@@ -1351,6 +1366,7 @@ impl fmt::Display for Statement {
             Statement::CreateView {
                 name,
                 or_replace,
+                if_not_exists,
                 columns,
                 query,
                 materialized,
@@ -1359,9 +1375,10 @@ impl fmt::Display for Statement {
             } => {
                 write!(
                     f,
-                    "CREATE {or_replace}{materialized}VIEW {name}",
+                    "CREATE {or_replace}{materialized}VIEW {if_not_exists}{name}",
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
                     materialized = if *materialized { "MATERIALIZED " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                     name = name
                 )?;
                 if let Some(emit_mode) = emit_mode {
@@ -1904,8 +1921,8 @@ pub enum FunctionArgExpr {
     ExprQualifiedWildcard(Expr, Vec<Ident>),
     /// Qualified wildcard, e.g. `alias.*` or `schema.table.*`.
     QualifiedWildcard(ObjectName),
-    /// An unqualified `*`
-    Wildcard,
+    /// An unqualified `*` or `* with (columns)`
+    WildcardOrWithExcept(Option<Vec<Expr>>),
 }
 
 impl fmt::Display for FunctionArgExpr {
@@ -1923,7 +1940,19 @@ impl fmt::Display for FunctionArgExpr {
                 )
             }
             FunctionArgExpr::QualifiedWildcard(prefix) => write!(f, "{}.*", prefix),
-            FunctionArgExpr::Wildcard => f.write_str("*"),
+            FunctionArgExpr::WildcardOrWithExcept(w) => match w {
+                Some(exprs) => write!(
+                    f,
+                    "EXCEPT ({})",
+                    exprs
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<String>>()
+                        .as_slice()
+                        .join(", ")
+                ),
+                None => f.write_str("*"),
+            },
         }
     }
 }
@@ -1965,6 +1994,7 @@ pub struct Function {
     // aggregate functions may contain order_by_clause
     pub order_by: Vec<OrderByExpr>,
     pub filter: Option<Box<Expr>>,
+    pub within_group: Option<Box<OrderByExpr>>,
 }
 
 impl Function {
@@ -1976,6 +2006,7 @@ impl Function {
             distinct: false,
             order_by: vec![],
             filter: None,
+            within_group: None,
         }
     }
 }

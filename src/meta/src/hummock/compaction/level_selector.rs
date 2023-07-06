@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 //  Copyright 2023 RisingWave Labs
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@ use std::collections::HashMap;
 // This source code is licensed under both the GPLv2 (found in the
 // COPYING file in the root directory) and Apache 2.0 License
 // (found in the LICENSE.Apache file in the root directory).
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use risingwave_common::catalog::TableOption;
@@ -62,7 +62,7 @@ pub trait LevelSelector: Sync + Send {
     fn task_type(&self) -> compact_task::TaskType;
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SelectContext {
     pub level_max_bytes: Vec<u64>,
 
@@ -191,20 +191,6 @@ impl DynamicLevelSelectorCore {
             .sum::<usize>()
             - handlers[0].get_pending_file_count();
 
-        let max_l0_overlapping_score = std::cmp::max(
-            SCORE_BASE * 2,
-            levels
-                .l0
-                .as_ref()
-                .unwrap()
-                .sub_levels
-                .iter()
-                .filter(|sub_level| sub_level.level_type() == LevelType::Overlapping)
-                .count() as u64
-                * SCORE_BASE
-                / self.config.level0_overlapping_sub_level_compact_level_count as u64,
-        );
-
         if idle_file_count > 0 {
             // trigger l0 compaction when the number of files is too large.
 
@@ -220,18 +206,15 @@ impl DynamicLevelSelectorCore {
                 .filter(|level| level.level_type() == LevelType::Overlapping)
                 .map(|level| level.table_infos.len())
                 .sum::<usize>();
-
-            // FIXME: use overlapping idle file count
-            let l0_overlapping_score =
-                std::cmp::min(idle_file_count, overlapping_file_count) as u64 * SCORE_BASE
-                    / self.config.level0_tier_compact_file_number;
-
-            // Reduce the level num of l0 overlapping sub_level
-            ctx.score_levels.push((
-                std::cmp::min(l0_overlapping_score, max_l0_overlapping_score),
-                0,
-                0,
-            ));
+            if overlapping_file_count > 0 {
+                // FIXME: use overlapping idle file count
+                let l0_overlapping_score =
+                    std::cmp::min(idle_file_count, overlapping_file_count) as u64 * SCORE_BASE
+                        / self.config.level0_tier_compact_file_number;
+                // Reduce the level num of l0 overlapping sub_level
+                ctx.score_levels
+                    .push((std::cmp::max(l0_overlapping_score, SCORE_BASE + 1), 0, 0));
+            }
 
             // The read query at the non-overlapping level only selects ssts that match the query
             // range at each level, so the number of levels is the most important factor affecting
@@ -241,11 +224,12 @@ impl DynamicLevelSelectorCore {
                 let total_size = levels.l0.as_ref().unwrap().total_file_size
                     - handlers[0].get_pending_output_file_size(ctx.base_level as u32);
                 let base_level_size = levels.get_level(ctx.base_level).total_file_size;
+                let base_level_sst_count =
+                    levels.get_level(ctx.base_level).table_infos.len() as u64;
 
                 // size limit
                 let non_overlapping_size_score = total_size * SCORE_BASE
                     / std::cmp::max(self.config.max_bytes_for_level_base, base_level_size);
-
                 // level count limit
                 let non_overlapping_level_count = levels
                     .l0
@@ -254,10 +238,12 @@ impl DynamicLevelSelectorCore {
                     .sub_levels
                     .iter()
                     .filter(|level| level.level_type() == LevelType::Nonoverlapping)
-                    .count();
-
-                let non_overlapping_level_score = non_overlapping_level_count as u64 * SCORE_BASE
-                    / self.config.level0_sub_level_compact_level_count as u64;
+                    .count() as u64;
+                let non_overlapping_level_score = non_overlapping_level_count * SCORE_BASE
+                    / std::cmp::max(
+                        base_level_sst_count / 16,
+                        self.config.level0_sub_level_compact_level_count as u64,
+                    );
 
                 std::cmp::max(non_overlapping_size_score, non_overlapping_level_score)
             };
@@ -292,7 +278,8 @@ impl DynamicLevelSelectorCore {
         }
 
         // sort reverse to pick the largest one.
-        ctx.score_levels.sort_by(|a, b| b.0.cmp(&a.0));
+        ctx.score_levels
+            .sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.cmp(&b.2)));
         ctx
     }
 
@@ -508,6 +495,7 @@ impl LevelSelector for SpaceReclaimCompactionSelector {
             .state
             .entry(group.group_id)
             .or_insert_with(SpaceReclaimPickerState::default);
+
         let compaction_input = picker.pick_compaction(levels, level_handlers, state)?;
         compaction_input.add_pending_task(task_id, level_handlers);
 
@@ -963,7 +951,6 @@ pub mod tests {
         assert_compaction_task(&compaction, &levels_handlers);
         assert_eq!(compaction.input.input_levels[0].level_idx, 0);
         assert_eq!(compaction.input.target_level, 2);
-        assert_eq!(compaction.target_file_size, config.target_file_size_base);
 
         levels_handlers[0].remove_task(1);
         levels_handlers[2].remove_task(1);

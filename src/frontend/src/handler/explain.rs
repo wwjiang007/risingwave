@@ -122,7 +122,7 @@ async fn do_handle_explain(
                     .map(|x| x.0),
 
                     Statement::CreateSink { stmt } => {
-                        gen_sink_plan(&session, context.clone(), stmt).map(|x| x.0)
+                        gen_sink_plan(&session, context.clone(), stmt).map(|x| x.1)
                     }
 
                     Statement::CreateIndex {
@@ -181,7 +181,7 @@ async fn do_handle_explain(
                         Convention::Batch => {
                             let worker_node_manager_reader = WorkerNodeSelector::new(
                                 session.env().worker_node_manager_ref(),
-                                !session.config().only_checkpoint_visible(),
+                                session.is_barrier_read(),
                             );
                             batch_plan_fragmenter = Some(BatchPlanFragmenter::new(
                                 worker_node_manager_reader,
@@ -200,8 +200,7 @@ async fn do_handle_explain(
             ExplainType::Physical => {
                 // if explain trace is on, the plan has been in the rows
                 if !explain_trace && let Ok(plan) = &plan {
-                    let output = plan.explain_to_string()?;
-                    blocks.push(output);
+                    blocks.push(plan.explain_to_string());
                 }
             }
             ExplainType::Logical => {
@@ -263,14 +262,14 @@ pub async fn handle_explain(
         .map(|l| Row::new(vec![Some(l.into())]))
         .collect_vec();
 
-    Ok(PgResponse::new_for_stream(
-        StatementType::EXPLAIN,
-        None,
-        rows.into(),
-        vec![PgFieldDescriptor::new(
-            "QUERY PLAN".to_owned(),
-            DataType::Varchar.to_oid(),
-            DataType::Varchar.type_len(),
-        )],
-    ))
+    Ok(PgResponse::builder(StatementType::EXPLAIN)
+        .values(
+            rows.into(),
+            vec![PgFieldDescriptor::new(
+                "QUERY PLAN".to_owned(),
+                DataType::Varchar.to_oid(),
+                DataType::Varchar.type_len(),
+            )],
+        )
+        .into())
 }

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt;
-
 use fixedbitset::FixedBitSet;
 use itertools::Itertools;
+use pretty_xmlish::XmlNode;
 use risingwave_pb::stream_plan::stream_node::PbNodeBody;
 
 use super::generic::{self, PlanAggCall};
+use super::utils::{childless_record, plan_node_name, Distill};
 use super::{ExprRewritable, PlanBase, PlanRef, PlanTreeNodeUnary, StreamNode};
 use crate::expr::ExprRewriter;
 use crate::optimizer::property::Distribution;
@@ -62,16 +62,12 @@ impl StreamSimpleAgg {
     }
 }
 
-impl fmt::Display for StreamSimpleAgg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.logical.fmt_with_name(
-            f,
-            if self.input().append_only() {
-                "StreamAppendOnlySimpleAgg"
-            } else {
-                "StreamSimpleAgg"
-            },
-        )
+impl Distill for StreamSimpleAgg {
+    fn distill<'a>(&self) -> XmlNode<'a> {
+        let name = plan_node_name!("StreamSimpleAgg",
+            { "append_only", self.input().append_only() },
+        );
+        childless_record(name, self.logical.fields_pretty())
     }
 }
 
@@ -94,7 +90,7 @@ impl StreamNode for StreamSimpleAgg {
     fn to_stream_prost_body(&self, state: &mut BuildFragmentGraphState) -> PbNodeBody {
         use risingwave_pb::stream_plan::*;
         let (result_table, agg_states, distinct_dedup_tables) =
-            self.logical.infer_tables(&self.base, None);
+            self.logical.infer_tables(&self.base, None, None);
 
         PbNodeBody::SimpleAgg(SimpleAggNode {
             agg_calls: self

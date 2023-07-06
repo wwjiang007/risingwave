@@ -19,14 +19,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use futures::channel::{mpsc, oneshot};
 use futures::future::join_all;
 use futures::{SinkExt, StreamExt};
+use itertools::Itertools;
 use madsim::net::ipvs::*;
 use madsim::runtime::{Handle, NodeHandle};
+use rand::seq::IteratorRandom;
 use rand::Rng;
+use risingwave_pb::common::WorkerNode;
 use sqllogictest::AsyncDB;
 
 use crate::client::RisingWave;
@@ -41,7 +44,7 @@ pub enum ConfigPath {
 }
 
 impl ConfigPath {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             ConfigPath::Regular(s) => s,
             ConfigPath::Temp(p) => p.as_os_str().to_str().unwrap(),
@@ -150,6 +153,7 @@ impl Cluster {
         }
 
         net.add_dns_record("frontend", "192.168.2.0".parse().unwrap());
+        net.add_dns_record("message_queue", "192.168.11.1".parse().unwrap());
         net.global_ipvs().add_service(
             ServiceAddr::Tcp("192.168.2.0:4566".into()),
             Scheduler::RoundRobin,
@@ -284,7 +288,7 @@ impl Cluster {
                 .name(format!("compute-{i}"))
                 .ip([192, 168, 3, i as u8].into())
                 .cores(conf.compute_node_cores)
-                .init(move || risingwave_compute::start(opts.clone()))
+                .init(move || risingwave_compute::start(opts.clone(), prometheus::Registry::new()))
                 .build();
         }
 
@@ -384,6 +388,18 @@ impl Cluster {
         self.client.spawn(future).await.unwrap()
     }
 
+    pub async fn get_random_worker_nodes(&self, n: usize) -> Result<Vec<WorkerNode>> {
+        let worker_nodes = self.get_cluster_info().await?.get_worker_nodes().clone();
+        if worker_nodes.len() < n {
+            return Err(anyhow!("cannot remove more nodes than present"));
+        }
+        let rand_nodes = worker_nodes
+            .iter()
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .to_vec();
+        Ok(rand_nodes.iter().cloned().cloned().collect_vec())
+    }
+
     /// Run a SQL query from the client and wait until the condition is met.
     pub async fn wait_until(
         &mut self,
@@ -420,7 +436,7 @@ impl Cluster {
             .await
     }
 
-    /// Kill some nodes and restart them in 2s.
+    /// Kill some nodes and restart them in 2s + restart_delay_secs with a probability of 0.1.
     pub async fn kill_node(&self, opts: &KillOpts) {
         let mut nodes = vec![];
         if opts.kill_meta {
@@ -523,6 +539,10 @@ impl Cluster {
 
     pub fn config(&self) -> Configuration {
         self.config.clone()
+    }
+
+    pub fn handle(&self) -> &Handle {
+        &self.handle
     }
 
     /// Graceful shutdown all RisingWave nodes.

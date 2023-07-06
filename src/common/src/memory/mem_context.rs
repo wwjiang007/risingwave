@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use prometheus::IntGauge;
 
+use super::MonitoredGlobalAlloc;
 use crate::metrics::TrAdderGauge;
 
 struct MemoryContextInner {
@@ -30,6 +31,7 @@ pub struct MemoryContext {
     inner: Option<Arc<MemoryContextInner>>,
 }
 
+#[derive(Debug)]
 pub enum MemCounter {
     /// Used when the add/sub operation don't have much conflicts.
     Atomic(IntGauge),
@@ -43,6 +45,22 @@ impl From<IntGauge> for MemCounter {
     }
 }
 
+impl MemCounter {
+    fn add(&self, bytes: i64) {
+        match &self {
+            MemCounter::TrAdder(c) => c.add(bytes),
+            MemCounter::Atomic(c) => c.add(bytes),
+        }
+    }
+
+    fn get_bytes_used(&self) -> i64 {
+        match &self {
+            MemCounter::TrAdder(c) => c.get(),
+            MemCounter::Atomic(c) => c.get(),
+        }
+    }
+}
+
 impl From<TrAdderGauge> for MemCounter {
     fn from(value: TrAdderGauge) -> Self {
         MemCounter::TrAdder(value)
@@ -50,12 +68,10 @@ impl From<TrAdderGauge> for MemCounter {
 }
 
 impl MemoryContext {
-    pub fn new<C: Into<MemCounter>>(parent: Option<MemoryContext>, counter: C) -> Self {
+    pub fn new(parent: Option<MemoryContext>, counter: impl Into<MemCounter>) -> Self {
+        let c = counter.into();
         Self {
-            inner: Some(Arc::new(MemoryContextInner {
-                counter: counter.into(),
-                parent,
-            })),
+            inner: Some(Arc::new(MemoryContextInner { counter: c, parent })),
         }
     }
 
@@ -64,17 +80,14 @@ impl MemoryContext {
         Self { inner: None }
     }
 
-    pub fn root<C: Into<MemCounter>>(counter: C) -> Self {
+    pub fn root(counter: impl Into<MemCounter>) -> Self {
         Self::new(None, counter)
     }
 
     /// Add `bytes` memory usage. Pass negative value to decrease memory usage.
     pub fn add(&self, bytes: i64) {
         if let Some(inner) = &self.inner {
-            match &inner.counter {
-                MemCounter::TrAdder(c) => c.add(bytes),
-                MemCounter::Atomic(c) => c.add(bytes),
-            }
+            inner.counter.add(bytes);
 
             if let Some(parent) = &inner.parent {
                 parent.add(bytes);
@@ -84,22 +97,22 @@ impl MemoryContext {
 
     pub fn get_bytes_used(&self) -> i64 {
         if let Some(inner) = &self.inner {
-            match &inner.counter {
-                MemCounter::TrAdder(c) => c.get(),
-                MemCounter::Atomic(c) => c.get(),
-            }
+            inner.counter.get_bytes_used()
         } else {
             0
         }
     }
+
+    /// Creates a new global allocator that reports memory usage to this context.
+    pub fn global_allocator(&self) -> MonitoredGlobalAlloc {
+        MonitoredGlobalAlloc::with_memory_context(self.clone())
+    }
 }
 
-impl Drop for MemoryContext {
+impl Drop for MemoryContextInner {
     fn drop(&mut self) {
-        if let Some(inner) = &self.inner {
-            if let Some(p) = &inner.parent {
-                p.add(-self.get_bytes_used())
-            }
+        if let Some(p) = &self.parent {
+            p.add(-self.counter.get_bytes_used())
         }
     }
 }

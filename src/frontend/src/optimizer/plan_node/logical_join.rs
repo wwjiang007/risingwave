@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::max;
 use std::collections::HashMap;
-use std::fmt;
 
 use fixedbitset::FixedBitSet;
 use itertools::{EitherOrBoth, Itertools};
-use risingwave_common::catalog::Schema;
+use pretty_xmlish::{Pretty, XmlNode};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_pb::plan_common::JoinType;
 use risingwave_pb::stream_plan::ChainType;
@@ -26,6 +24,7 @@ use risingwave_pb::stream_plan::ChainType;
 use super::generic::{
     push_down_into_join, push_down_join_condition, GenericPlanNode, GenericPlanRef,
 };
+use super::utils::{childless_record, Distill};
 use super::{
     generic, ColPrunable, ExprRewritable, PlanBase, PlanRef, PlanTreeNodeBinary, PredicatePushdown,
     StreamHashJoin, StreamProject, ToBatch, ToStream,
@@ -55,43 +54,26 @@ pub struct LogicalJoin {
     core: generic::Join<PlanRef>,
 }
 
-impl fmt::Display for LogicalJoin {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Distill for LogicalJoin {
+    fn distill<'a>(&self) -> XmlNode<'a> {
         let verbose = self.base.ctx.is_explain_verbose();
-        let mut builder = f.debug_struct("LogicalJoin");
-        builder.field("type", &self.join_type());
+        let mut vec = Vec::with_capacity(if verbose { 3 } else { 2 });
+        vec.push(("type", Pretty::debug(&self.join_type())));
 
-        let mut concat_schema = self.left().schema().fields.clone();
-        concat_schema.extend(self.right().schema().fields.clone());
-        let concat_schema = Schema::new(concat_schema);
-        builder.field(
-            "on",
-            &ConditionDisplay {
-                condition: self.on(),
-                input_schema: &concat_schema,
-            },
-        );
+        let concat_schema = self.core.concat_schema();
+        let cond = Pretty::debug(&ConditionDisplay {
+            condition: self.on(),
+            input_schema: &concat_schema,
+        });
+        vec.push(("on", cond));
 
         if verbose {
-            if self
-                .output_indices()
-                .iter()
-                .copied()
-                .eq(0..self.internal_column_num())
-            {
-                builder.field("output", &format_args!("all"));
-            } else {
-                builder.field(
-                    "output",
-                    &IndicesDisplay {
-                        indices: self.output_indices(),
-                        input_schema: &concat_schema,
-                    },
-                );
-            }
+            let data = IndicesDisplay::from_join(&self.core, &concat_schema)
+                .map_or_else(|| Pretty::from("all"), |id| Pretty::display(&id));
+            vec.push(("output", data));
         }
 
-        builder.finish()
+        childless_record("LogicalJoin", vec)
     }
 }
 
@@ -267,7 +249,7 @@ impl LogicalJoin {
 
         for expr in &predicate.conjunctions {
             if let ExprImpl::FunctionCall(func) = expr {
-                match func.get_expr_type() {
+                match func.func_type() {
                     ExprType::Equal
                     | ExprType::NotEqual
                     | ExprType::LessThan
@@ -377,19 +359,24 @@ impl LogicalJoin {
         let order_key = table_desc.order_column_indices();
         let dist_key = table_desc.distribution_key.clone();
         // The at least prefix of order key that contains distribution key.
-        let at_least_prefix_len = {
-            let mut max_pos = 0;
-            for d in dist_key {
-                max_pos = max(
-                    max_pos,
-                    order_key
-                        .iter()
-                        .position(|&x| x == d)
-                        .expect("dist_key must in order_key"),
-                );
-            }
-            max_pos + 1
-        };
+        let mut dist_key_in_order_key_pos = vec![];
+        for d in dist_key {
+            let pos = order_key
+                .iter()
+                .position(|&x| x == d)
+                .expect("dist_key must in order_key");
+            dist_key_in_order_key_pos.push(pos);
+        }
+        // The at least prefix of order key that contains distribution key.
+        let at_least_prefix_len = dist_key_in_order_key_pos
+            .iter()
+            .max()
+            .map_or(0, |pos| pos + 1);
+
+        // Distributed lookup join can't support lookup table with a singleton distribution.
+        if at_least_prefix_len == 0 {
+            return None;
+        }
 
         // Reorder the join equal predicate to match the order key.
         let mut reorder_idx = Vec::with_capacity(at_least_prefix_len);
@@ -979,7 +966,7 @@ impl LogicalJoin {
 
         if !left.append_only() {
             return Err(RwError::from(ErrorCode::NotSupported(
-                "Temporal join requires a append-only left input".into(),
+                "Temporal join requires an append-only left input".into(),
                 "Please ensure your left input is append-only".into(),
             )));
         }
@@ -1249,6 +1236,17 @@ impl ToBatch for LogicalJoin {
 
 impl ToStream for LogicalJoin {
     fn to_stream(&self, ctx: &mut ToStreamContext) -> Result<PlanRef> {
+        if self
+            .on()
+            .conjunctions
+            .iter()
+            .any(|cond| cond.count_nows() > 0)
+        {
+            return Err(ErrorCode::NotSupported(
+                "optimizer has tried to separate the temporal predicate(with now() expression) from the on condition, but it still reminded in on join's condition. Considering move it into WHERE clause?".to_string(),
+                 "please refer to https://www.risingwave.dev/docs/current/sql-pattern-temporal-filters/ for more information".to_string()).into());
+        }
+
         let predicate = EqJoinPredicate::create(
             self.left().schema().len(),
             self.right().schema().len(),
@@ -1403,7 +1401,7 @@ mod tests {
 
     use std::collections::HashSet;
 
-    use risingwave_common::catalog::Field;
+    use risingwave_common::catalog::{Field, Schema};
     use risingwave_common::types::{DataType, Datum};
     use risingwave_pb::expr::expr_node::Type;
 

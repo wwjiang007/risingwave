@@ -53,18 +53,8 @@ pub async fn handle_create_function(
     }
     let language = match params.language {
         Some(lang) => lang.real_value().to_lowercase(),
-        None => {
-            return Err(
-                ErrorCode::InvalidParameterValue("LANGUAGE must be specified".to_string()).into(),
-            )
-        }
+        None => "".to_string(),
     };
-    if language != "python" {
-        return Err(ErrorCode::InvalidParameterValue(
-            "LANGUAGE should be one of: python".to_string(),
-        )
-        .into());
-    }
     let Some(FunctionDefinition::SingleQuotedDef(identifier)) = params.as_ else {
         return Err(ErrorCode::InvalidParameterValue("AS must be specified".to_string()).into());
     };
@@ -138,20 +128,10 @@ pub async fn handle_create_function(
     let args = arrow_schema::Schema::new(arg_types.iter().map(|t| to_field(t.into())).collect());
     let returns = arrow_schema::Schema::new(match kind {
         Kind::Scalar(_) => vec![to_field(return_type.clone().into())],
-        Kind::Table(_) => {
-            let mut fields = vec![arrow_schema::Field::new(
-                "row_index",
-                arrow_schema::DataType::Int64,
-                true,
-            )];
-            match &return_type {
-                DataType::Struct(s) => {
-                    fields.extend(s.fields.iter().map(|t| to_field(t.clone().into())))
-                }
-                _ => fields.push(to_field(return_type.clone().into())),
-            }
-            fields
-        }
+        Kind::Table(_) => vec![
+            arrow_schema::Field::new("row_index", arrow_schema::DataType::Int32, true),
+            to_field(return_type.clone().into()),
+        ],
         _ => unreachable!(),
     });
     client

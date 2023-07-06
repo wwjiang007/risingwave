@@ -17,7 +17,10 @@ use std::{fmt, vec};
 
 use fixedbitset::FixedBitSet;
 use itertools::Itertools;
-use risingwave_common::catalog::{ColumnCatalog, ColumnDesc, ConflictBehavior, Field, Schema};
+use pretty_xmlish::{Pretty, Str, StrAssocArr, XmlNode};
+use risingwave_common::catalog::{
+    ColumnCatalog, ColumnDesc, ConflictBehavior, Field, FieldDisplay, Schema,
+};
 use risingwave_common::util::sort_util::{ColumnOrder, OrderType};
 
 use crate::catalog::table_catalog::TableType;
@@ -140,6 +143,7 @@ impl TableCatalogBuilder {
             properties: self.properties,
             // TODO(zehua): replace it with FragmentId::placeholder()
             fragment_id: FragmentId::MAX - 1,
+            dml_fragment_id: None,
             vnode_col_index: self.vnode_col_idx,
             row_id_index: None,
             value_indices: self
@@ -159,10 +163,102 @@ impl TableCatalogBuilder {
     }
 }
 
+/// See also [`super::generic::DistillUnit`].
+pub trait Distill {
+    fn distill<'a>(&self) -> XmlNode<'a>;
+
+    fn distill_to_string(&self) -> String {
+        let mut config = pretty_config();
+        let mut output = String::with_capacity(2048);
+        config.unicode(&mut output, &Pretty::Record(self.distill()));
+        output
+    }
+}
+
+pub(super) fn childless_record<'a>(
+    name: impl Into<Str<'a>>,
+    fields: StrAssocArr<'a>,
+) -> XmlNode<'a> {
+    XmlNode::simple_record(name, fields, Default::default())
+}
+
+macro_rules! impl_distill_by_unit {
+    ($ty:ty, $core:ident, $name:expr) => {
+        use pretty_xmlish::XmlNode;
+        use $crate::optimizer::plan_node::generic::DistillUnit;
+        use $crate::optimizer::plan_node::utils::Distill;
+        impl Distill for $ty {
+            fn distill<'a>(&self) -> XmlNode<'a> {
+                self.$core.distill_with_name($name)
+            }
+        }
+    };
+}
+pub(crate) use impl_distill_by_unit;
+
+pub(crate) fn column_names_pretty<'a>(schema: &Schema) -> Pretty<'a> {
+    let columns = (schema.fields.iter())
+        .map(|f| f.name.clone())
+        .map(Pretty::from)
+        .collect();
+    Pretty::Array(columns)
+}
+
+pub(crate) fn watermark_pretty<'a>(
+    watermark_columns: &FixedBitSet,
+    schema: &Schema,
+) -> Option<Pretty<'a>> {
+    if watermark_columns.count_ones(..) > 0 {
+        Some(watermark_fields_pretty(watermark_columns.ones(), schema))
+    } else {
+        None
+    }
+}
+pub(crate) fn watermark_fields_pretty<'a>(
+    watermark_columns: impl Iterator<Item = usize>,
+    schema: &Schema,
+) -> Pretty<'a> {
+    let arr = watermark_columns
+        .map(|idx| FieldDisplay(schema.fields.get(idx).unwrap()))
+        .map(|d| Pretty::display(&d))
+        .collect();
+    Pretty::Array(arr)
+}
+
 #[derive(Clone, Copy)]
 pub struct IndicesDisplay<'a> {
     pub indices: &'a [usize],
     pub input_schema: &'a Schema,
+}
+
+impl<'a> IndicesDisplay<'a> {
+    /// Returns `None` means all
+    pub fn from_join<PlanRef: GenericPlanRef>(
+        join: &'a generic::Join<PlanRef>,
+        input_schema: &'a Schema,
+    ) -> Option<Self> {
+        Self::from(
+            &join.output_indices,
+            join.internal_column_num(),
+            input_schema,
+        )
+    }
+
+    /// Returns `None` means all
+    pub fn from(
+        indices: &'a [usize],
+        internal_column_num: usize,
+        input_schema: &'a Schema,
+    ) -> Option<Self> {
+        if indices.iter().copied().eq(0..internal_column_num) {
+            None
+        } else {
+            Some(Self {
+                indices,
+                input_schema,
+            })
+        }
+    }
 }
 
 impl fmt::Display for IndicesDisplay<'_> {
@@ -181,3 +277,27 @@ impl fmt::Debug for IndicesDisplay<'_> {
         f.finish()
     }
 }
+
+/// Call `debug_struct` on the given formatter to create a debug struct builder.
+/// If a property list is provided, properties in it will be added to the struct name according to
+/// the condition of that property.
+macro_rules! plan_node_name {
+    ($name:literal $(, { $prop:literal, $cond:expr } )* $(,)?) => {
+        {
+            #[allow(unused_mut)]
+            let mut properties: Vec<&str> = vec![];
+            $( if $cond { properties.push($prop); } )*
+            let mut name = $name.to_string();
+            if !properties.is_empty() {
+                name += " [";
+                name += &properties.join(", ");
+                name += "]";
+            }
+            name
+        }
+    };
+}
+pub(crate) use plan_node_name;
+
+use super::generic::{self, GenericPlanRef};
+use super::pretty_config;

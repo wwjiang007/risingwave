@@ -153,6 +153,17 @@ def section_compaction(outer_panels):
                         ),
                     ],
                 ),
+                panels.timeseries_bytesps(
+                    "Commit Flush Bytes by Table",
+                    "The  of bytes that have been written by commit epoch per second.",
+                    [
+                        panels.target(
+                            f"sum(rate({metric('storage_commit_write_throughput')}[$__rate_interval])) by (table_id)",
+                            "write - {{table_id}}",
+                        ),
+                    ],
+                ),
+
                 panels.timeseries_count(
                     "Compactor Core Count To Scale",
                     "The number of CPUs needed to meet the demand of compaction.",
@@ -555,6 +566,21 @@ def section_object_storage(outer_panels):
                         )
                     ],
                 ),
+                panels.timeseries_ops(
+                    "Operation Retry Rate",
+                    "",
+                    [
+                        panels.target(
+                            f"sum(irate({metric('aws_sdk_retry_counts')}[$__rate_interval])) by (instance, job, type)",
+                            "{{type}} - {{job}} @ {{instance}}",
+                        ),
+
+                        panels.target(
+                            f"sum(irate({metric('s3_read_request_retry_count')}[$__rate_interval])) by (instance, job, type)",
+                            "{{type}} - {{job}} @ {{instance}}",
+                        )
+                    ],
+                ),
                 panels.timeseries_dollar(
                     "Estimated S3 Cost (Realtime)",
                     "There are two types of operations: 1. GET, SELECT, and DELETE, they cost 0.0004 USD per 1000 "
@@ -595,6 +621,8 @@ def section_object_storage(outer_panels):
 
 
 def section_streaming(panels):
+    mv_filter = "executor_identity=~\".*MaterializeExecutor.*\""
+    sink_filter = "executor_identity=~\".*SinkExecutor.*\""
     return [
         panels.row("Streaming"),
         panels.timeseries_rowsps(
@@ -603,7 +631,7 @@ def section_streaming(panels):
             [
                 panels.target(
                     f"rate({metric('stream_source_output_rows_counts')}[$__rate_interval])",
-                    "source={{source_name}} {{source_id}} @ {{instance}}",
+                    "source={{source_name}} actor={{actor_id}} @ {{instance}}",
                 ),
             ],
         ),
@@ -661,13 +689,47 @@ def section_streaming(panels):
                 )
             ]
         ),
-        panels.timeseries_rowsps(
-            "Sink Throughput(rows/s)",
-            "The figure shows the number of rows output by each sink per second.",
+        panels.timeseries_ops(
+            "Source Split Change Events frequency(events/s)",
+            "Source Split Change Events frequency by source_id and actor_id",
             [
                 panels.target(
-                    f"rate({metric('stream_sink_output_rows_counts')}[$__rate_interval])",
-                    "sink={{sink_name}} {{sink_id}} @ {{instance}}",
+                    f"rate({metric('stream_source_split_change_event_count')}[$__rate_interval])",
+                    "source={{source_name}} actor={{actor_id}} @ {{instance}}"
+                )
+            ]
+        ),
+        panels.timeseries_count(
+            "Kafka Consumer Lag Size",
+            "Kafka Consumer Lag Size by source_id, partition and actor_id",
+            [
+                panels.target(
+                    f"{metric('high_watermark')}",
+                    "source={{source_id}} partition={{partition}}"
+                ),
+                panels.target(
+                    f"{metric('latest_message_id')}",
+                    "source={{source_id}} partition={{partition}} actor_id={{actor_id}}"
+                )
+            ]
+        ),
+        panels.timeseries_rowsps(
+            "Sink Throughput(rows/s)",
+            "The figure shows the number of rows output by each sink executor actor per second.",
+            [
+                panels.target(
+                    f"rate({metric('stream_executor_row_count', filter=sink_filter)}[$__rate_interval])",
+                    "sink={{executor_identity}} {{actor_id}} @ {{instance}}",
+                ),
+            ],
+        ),
+        panels.timeseries_rowsps(
+            "Materialized View Throughput(rows/s)",
+            "The figure shows the number of rows written into each materialized executor actor per second.",
+            [
+                panels.target(
+                    f"rate({metric('stream_executor_row_count', filter=mv_filter)}[$__rate_interval])",
+                    "MV={{executor_identity}} {{actor_id}} @ {{instance}}",
                 ),
             ],
         ),
@@ -800,7 +862,7 @@ def section_streaming_actors(outer_panels):
                     [
                         panels.target(
                             f"rate({metric('stream_executor_row_count')}[$__rate_interval]) > 0",
-                            "{{actor_id}}->{{executor_id}}",
+                            "{{actor_id}}->{{executor_identity}}",
                         ),
                     ],
                 ),
@@ -817,12 +879,22 @@ def section_streaming_actors(outer_panels):
                     ],
                 ),
                 panels.timeseries_bytes(
-                    "Actor Memory Usage",
+                    "Actor Memory Usage (TaskLocalAlloc)",
                     "",
                     [
                         panels.target(
-                            "rate(actor_memory_usage[$__rate_interval])",
+                            f"{metric('actor_memory_usage')}",
                             "{{actor_id}}",
+                        ),
+                    ],
+                ),
+                panels.timeseries_bytes(
+                    "Executor Memory Usage",
+                    "",
+                    [
+                        panels.target(
+                            f"{metric('stream_memory_usage')}",
+                            "table {{table_id}} actor {{actor_id}} desc: {{desc}}",
                         ),
                     ],
                 ),
@@ -1372,7 +1444,7 @@ def section_batch(outer_panels):
                         ),
                     ],
                 ),
-                panels.timeseries_row(
+                panels.timeseries_count(
                     "Batch Mpp Task Number",
                     "",
                     [
@@ -1382,12 +1454,22 @@ def section_batch(outer_panels):
                         ),
                     ],
                 ),
-                panels.timeseries_row(
+                panels.timeseries_memory(
                     "Batch Mem Usage",
                     "All memory usage of batch executors in bytes",
                     [
                         panels.target(
                             f"{metric('batch_total_mem')}",
+                            "",
+                        ),
+                    ],
+                ),
+                panels.timeseries_count(
+                    "Batch Heartbeat Worker Number",
+                    "",
+                    [
+                        panels.target(
+                            f"{metric('batch_heartbeat_worker_num')}",
                             "",
                         ),
                     ],
@@ -1728,13 +1810,9 @@ def section_hummock(panels):
             ],
         ),
         panels.timeseries_percentage(
-            "Filter/Cache Miss Rate",
+            "Cache Miss Rate",
             "",
             [
-                panels.target(
-                    f"1 - (sum(rate({table_metric('state_store_bloom_filter_true_negative_counts')}[$__rate_interval])) by (job,instance,table_id,type)) / (sum(rate({table_metric('state_bloom_filter_check_counts')}[$__rate_interval])) by (job,instance,table_id,type))",
-                    "bloom filter miss rate - {{table_id}} - {{type}} @ {{job}} @ {{instance}}",
-                ),
                 panels.target(
                     f"(sum(rate({table_metric('state_store_sst_store_block_request_counts', meta_miss_filter)}[$__rate_interval])) by (job,instance,table_id)) / (sum(rate({table_metric('state_store_sst_store_block_request_counts', meta_total_filter)}[$__rate_interval])) by (job,instance,table_id))",
                     "meta cache miss rate - {{table_id}} @ {{job}} @ {{instance}}",
@@ -1747,14 +1825,24 @@ def section_hummock(panels):
                     f"(sum(rate({metric('file_cache_miss')}[$__rate_interval])) by (instance)) / (sum(rate({metric('file_cache_latency_count', file_cache_get_filter)}[$__rate_interval])) by (instance))",
                     "file cache miss rate @ {{instance}}",
                 ),
-
+            ],
+        ),
+        panels.timeseries_percentage(
+            "Read Request Bloom-Filter Filtered Rate",
+            "Negative / Total",
+            [
                 panels.target(
                     f"1 - (((sum(rate({table_metric('state_store_read_req_bloom_filter_positive_counts')}[$__rate_interval])) by (job,instance,table_id,type))) / (sum(rate({table_metric('state_store_read_req_check_bloom_filter_counts')}[$__rate_interval])) by (job,instance,table_id,type)))",
                     "read req bloom filter filter rate - {{table_id}} - {{type}} @ {{job}} @ {{instance}}",
                 ),
-
+            ],
+        ),
+        panels.timeseries_percentage(
+            "Read Request Bloom-Filter False-Positive Rate",
+            "False-Positive / Positive",
+            [
                 panels.target(
-                    f"1 - (((sum(rate({table_metric('state_store_read_req_positive_but_non_exist_counts')}[$__rate_interval])) by (job,instance,table_id,type))) / (sum(rate({table_metric('state_store_read_req_bloom_filter_positive_counts')}[$__rate_interval])) by (job,instance,table_id,type)))",
+                    f"(((sum(rate({table_metric('state_store_read_req_positive_but_non_exist_counts')}[$__rate_interval])) by (job,instance,table_id,type))) / (sum(rate({table_metric('state_store_read_req_bloom_filter_positive_counts')}[$__rate_interval])) by (job,instance,table_id,type)))",
                     "read req bloom filter false positive rate - {{table_id}} - {{type}} @ {{job}} @ {{instance}}",
                 ),
             ],
@@ -1779,22 +1867,30 @@ def section_hummock(panels):
         ),
 
         panels.timeseries_count(
-            "Merge Imm - Finished Tasks Count",
+            "Uploader - Tasks Count",
             "",
             [
                 panels.target(
                     f"sum(irate({table_metric('state_store_merge_imm_task_counts')}[$__rate_interval])) by (job,instance,table_id)",
                     "merge imm tasks - {{table_id}} @ {{instance}} ",
                 ),
+                panels.target(
+                    f"sum(irate({metric('state_store_spill_task_counts')}[$__rate_interval])) by (job,instance,uploader_stage)",
+                    "Uploader spill tasks - {{uploader_stage}} @ {{instance}} ",
+                ),
             ],
         ),
         panels.timeseries_bytes(
-            "Merge Imm - Finished Task Memory Size",
+            "Uploader - Task Size",
             "",
             [
                 panels.target(
                     f"sum(rate({table_metric('state_store_merge_imm_memory_sz')}[$__rate_interval])) by (job,instance,table_id)",
-                    "tasks memory size - {{table_id}} @ {{instance}} ",
+                    "Merging tasks memory size - {{table_id}} @ {{instance}} ",
+                ),
+                panels.target(
+                    f"sum(rate({metric('state_store_spill_task_size')}[$__rate_interval])) by (job,instance,uploader_stage)",
+                    "Uploading tasks size - {{uploader_stage}} @ {{instance}} ",
                 ),
             ],
         ),
@@ -1858,11 +1954,11 @@ def section_hummock(panels):
             "",
             [
                 panels.target(
-                    f"sum(rate({table_metric('state_store_write_batch_size_sum')}[$__rate_interval]))by(job,instance) / sum(rate({table_metric('state_store_write_batch_size_count')}[$__rate_interval]))by(job,instance,table_id)",
+                    f"sum(rate({table_metric('state_store_write_batch_size_sum')}[$__rate_interval]))by(job,instance,table_id) / sum(rate({table_metric('state_store_write_batch_size_count')}[$__rate_interval]))by(job,instance,table_id)",
                     "shared_buffer - {{table_id}} @ {{job}} @ {{instance}}",
                 ),
                 panels.target(
-                    f"sum(rate({metric('compactor_shared_buffer_to_sstable_size')}[$__rate_interval]))by(job,instance) / sum(rate({metric('state_store_shared_buffer_to_sstable_size_count')}[$__rate_interval]))by(job,instance)",
+                    f"sum(rate({metric('compactor_shared_buffer_to_sstable_size_sum')}[$__rate_interval]))by(job,instance) / sum(rate({metric('compactor_shared_buffer_to_sstable_size_count')}[$__rate_interval]))by(job,instance)",
                     "sync - {{job}} @ {{instance}}",
                 ),
             ],
@@ -1898,8 +1994,12 @@ def section_hummock(panels):
                     "data cache - {{job}} @ {{instance}}",
                 ),
                 panels.target(
-                    f"sum({metric('state_store_limit_memory_size')}) by (job,instance)",
+                    f"sum({metric('uploading_memory_size')}) by (job,instance)",
                     "uploading memory - {{job}} @ {{instance}}",
+                ),
+                panels.target(
+                    f"sum({metric('state_store_uploader_uploading_task_size')}) by (job,instance)",
+                    "uploading task size - {{job}} @ {{instance}}",
                 ),
             ],
         ),
@@ -1959,6 +2059,39 @@ def section_hummock(panels):
                 panels.target(
                     f"{metric('state_store_iter_slow_fetch_meta_cache_unhits')}",
                     "",
+                ),
+            ],
+        ),
+
+        panels.timeseries_count(
+            "Move State Table Count",
+            "The times of move_state_table occurs",
+            [
+                panels.target(
+                    f"sum({table_metric('storage_move_state_table_count')}[$__rate_interval]) by (group)",
+                    "move table cg{{group}}",
+                ),
+            ],
+        ),
+
+        panels.timeseries_count(
+            "State Table Count",
+            "The number of state_tables in each CG",
+            [
+                panels.target(
+                    f"sum(irate({table_metric('storage_state_table_count')}[$__rate_interval])) by (group)",
+                    "state table cg{{group}}",
+                ),
+            ],
+        ),
+
+        panels.timeseries_count(
+            "Branched SST Count",
+            "The number of branched_sst in each CG",
+            [
+                panels.target(
+                    f"sum(irate({table_metric('storage_branched_sst_count')}[$__rate_interval])) by (group)",
+                    "branched sst cg{{group}}",
                 ),
             ],
         ),
@@ -2188,6 +2321,30 @@ Objects are classified into 3 groups:
                             f"rate({metric('storage_version_checkpoint_latency_sum')}[$__rate_interval]) / rate({metric('storage_version_checkpoint_latency_count')}[$__rate_interval])",
                             "version_checkpoint_latency_avg",
                         ),
+                    ],
+                ),
+                panels.timeseries_count(
+                    "Write Stop Compaction Groups",
+                    "When certain per compaction group threshold is exceeded (e.g. number of level 0 sub-level in LSMtree), write op to that compaction group is stopped temporarily. Check log for detail reason of write stop.",
+                    [
+                        panels.target(f"{metric('storage_write_stop_compaction_groups')}",
+                                      "compaction_group_{{compaction_group_id}}"),
+                    ],
+                ),
+                panels.timeseries_count(
+                    "Full GC Trigger Count",
+                    "total number of attempts to trigger full GC",
+                    [
+                        panels.target(f"{metric('storage_full_gc_trigger_count')}",
+                                      "full_gc_trigger_count"),
+                    ],
+                ),
+                panels.timeseries_count(
+                    "Full GC Last Watermark",
+                    "the object id watermark used in last full GC",
+                    [
+                        panels.target(f"{metric('storage_full_gc_last_object_id_watermark')}",
+                                      "full_gc_last_object_id_watermark"),
                     ],
                 ),
             ],
@@ -2528,6 +2685,16 @@ def section_memory_manager(outer_panels):
                         ),
                     ],
                 ),
+                panels.timeseries_ms(
+                    "LRU manager diff between current watermark and evicted watermark time (ms) for actors",
+                    "",
+                    [
+                        panels.target(
+                            f"{metric('lru_evicted_watermark_time_diff_ms')}",
+                            "table {{table_id}} actor {{actor_id}} desc: {{desc}}",
+                        ),
+                    ],
+                ),
             ],
         ),
     ]
@@ -2544,8 +2711,8 @@ def section_connector_node(outer_panels):
                     "",
                     [
                         panels.target(
-                            f"rate({metric('connector_source_rows_received')}[$__interval])",
-                            "{{source_type}} @ {{source_id}}",
+                            f"rate({metric('connector_source_rows_received')}[$__rate_interval])",
+                            "source={{source_type}} @ {{source_id}}",
                         ),
                     ],
                 ),
@@ -2554,8 +2721,8 @@ def section_connector_node(outer_panels):
                     "",
                     [
                         panels.target(
-                            f"rate({metric('connector_sink_rows_received')}[$__interval])",
-                            "{{connector_type}} @ {{sink_id}}",
+                            f"rate({metric('connector_sink_rows_received')}[$__rate_interval])",
+                            "sink={{connector_type}} @ {{sink_id}}",
                         ),
                     ],
                 ),

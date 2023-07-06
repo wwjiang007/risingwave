@@ -19,8 +19,29 @@ This test will be run as a unit test:
 
 Take a look at [`gen_queries.sh`](scripts/gen_queries.sh).
 
-Caveat: Even with a given snapshot, certain parts of the system are non-determninistic.
-For instance with scheduler errors, the same query may not trigger errors when executed.
+Sometimes during the generation process some failed queries might be encountered.
+
+For instance if the logs produces:
+```sh
+[WARN] Cluster crashed while generating queries. see .risingwave/log/generate-22.log for more information.
+```
+
+You can re-run the failed query:
+```sh
+RUST_BACKTRACE=1 MADSIM_TEST_SEED=22 RUST_LOG=info \
+./target/sim/ci-sim/risingwave_simulation \
+  --run-sqlsmith-queries $SNAPSHOT_DIR/failed/22
+```
+
+The `failed query` is a summary of the full query set.
+In case it does not actually fail, it might be wrong.
+
+You can re-run the full query set as well in that case:
+```sh
+RUST_BACKTRACE=1 MADSIM_TEST_SEED=22 RUST_LOG=info \
+./target/sim/ci-sim/risingwave_simulation \
+ --run-sqlsmith-queries $SNAPSHOT_DIR/22
+```
 
 ## Running with Madsim
 
@@ -30,21 +51,37 @@ for the latest madsim build instructions.
 ```sh
 # Build madsim
 cargo make sslt-build-all --profile ci-sim
-# The target bin can be found here:
-# target/sim/ci-sim/risingwave_simulation
 # Run fuzzing
-RUST_BACKTRACE=1 MADSIM_TEST_SEED=1 ./target/sim/ci-sim/risingwave_simulation --sqlsmith 100 ./src/tests/sqlsmith/tests/testdata
+RUST_LOG=info RUST_BACKTRACE=1 MADSIM_TEST_SEED=1 ./target/sim/ci-sim/risingwave_simulation --sqlsmith 100 ./src/tests/sqlsmith/tests/testdata
+
+# Run fuzzing and save contents, since it takes a while to run each time.
+RUST_LOG=info RUST_BACKTRACE=1 MADSIM_TEST_SEED=1 ./target/sim/ci-sim/risingwave_simulation --sqlsmith 100 ./src/tests/sqlsmith/tests/testdata 1>sqlsmith.log 2>&1
+cat sqlsmith.log | less
 ```
 
-## E2E
+## E2E - random fuzzing
 
-In the second mode, it will test the entire query handling end-to-end. We provide a CLI tool that represents a Postgres client. You can run this tool via:
+This mode will test the entire query handling end-to-end. We provide a CLI tool that represents a Postgres client. You can run this tool via:
 
 ```sh
 cargo build
 ./risedev d
 ./target/debug/sqlsmith test --testdata ./src/tests/sqlsmith/tests/testdata
 ```
+
+## E2E - differential testing
+
+This mode will generate batch and stream queries and **diff them after sorting**.
+
+You can run this tool like so:
+
+```sh
+cargo build
+./risedev d
+./target/debug/sqlsmith test --testdata ./src/tests/sqlsmith/tests/testdata --differential-testing
+```
+
+## Generating function signatures
 
 Additionally, in some cases where you may want to debug whether we have defined some function/operator incorrectly,
 you can try:

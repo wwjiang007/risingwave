@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -21,16 +22,17 @@ use itertools::Itertools;
 use risingwave_common::hash::ParallelUnitId;
 use risingwave_pb::common::worker_node::{Property, State};
 use risingwave_pb::common::{HostAddress, ParallelUnit, WorkerNode, WorkerType};
-use risingwave_pb::meta::add_worker_node_request::Property as RegisterProperty;
+use risingwave_pb::meta::add_worker_node_request::Property as AddNodeProperty;
 use risingwave_pb::meta::heartbeat_request;
 use risingwave_pb::meta::subscribe_response::{Info, Operation};
+use risingwave_pb::meta::update_worker_node_schedulability_request::Schedulability;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio::task::JoinHandle;
 
 use crate::manager::{IdCategory, LocalNotification, MetaSrvEnv};
-use crate::model::{MetadataModel, Worker, INVALID_EXPIRE_AT};
-use crate::storage::MetaStore;
+use crate::model::{MetadataModel, ValTransaction, VarTransaction, Worker, INVALID_EXPIRE_AT};
+use crate::storage::{MetaStore, Transaction};
 use crate::{MetaError, MetaResult};
 
 pub type WorkerId = u32;
@@ -45,6 +47,7 @@ impl PartialEq<Self> for WorkerKey {
         self.0.eq(&other.0)
     }
 }
+
 impl Eq for WorkerKey {}
 
 impl Hash for WorkerKey {
@@ -71,8 +74,7 @@ where
     S: MetaStore,
 {
     pub async fn new(env: MetaSrvEnv<S>, max_heartbeat_interval: Duration) -> MetaResult<Self> {
-        let meta_store = env.meta_store_ref();
-        let core = ClusterManagerCore::new(meta_store.clone()).await?;
+        let core = ClusterManagerCore::new(env.meta_store_ref()).await?;
 
         Ok(Self {
             env,
@@ -99,14 +101,58 @@ where
         &self,
         r#type: WorkerType,
         host_address: HostAddress,
-        property: RegisterProperty,
+        property: AddNodeProperty,
     ) -> MetaResult<WorkerNode> {
         let worker_node_parallelism = property.worker_node_parallelism as usize;
-        let property = self.parse_property(r#type, property);
+        let mut property = self.parse_property(r#type, property);
         let mut core = self.core.write().await;
+
         if let Some(worker) = core.get_worker_by_host_mut(host_address.clone()) {
-            // TODO: update parallelism when the worker exists.
+            if let Some(property) = &mut property {
+                property.is_unschedulable = worker
+                    .worker_node
+                    .property
+                    .as_ref()
+                    .unwrap()
+                    .is_unschedulable;
+            }
+
             worker.update_ttl(self.max_heartbeat_interval);
+            let current_parallelism = worker.worker_node.parallel_units.len();
+            if current_parallelism == worker_node_parallelism
+                && worker.worker_node.property == property
+            {
+                return Ok(worker.to_protobuf());
+            }
+            match current_parallelism.cmp(&worker_node_parallelism) {
+                Ordering::Less => {
+                    tracing::info!(
+                        "worker {} parallelism updated from {} to {}",
+                        worker.worker_node.id,
+                        current_parallelism,
+                        worker_node_parallelism
+                    );
+                    let parallel_units = self
+                        .generate_cn_parallel_units(
+                            worker_node_parallelism - current_parallelism,
+                            worker.worker_id(),
+                        )
+                        .await?;
+                    worker.worker_node.parallel_units.extend(parallel_units);
+                }
+                Ordering::Greater => {
+                    // Simply reject the request if the worker registered with a smaller
+                    // parallelism.
+                    return Err(MetaError::invalid_worker(
+                        worker.worker_id(),
+                        format!(
+                            "parallelism is less than current, current is {}, but received {}",
+                            current_parallelism, worker_node_parallelism
+                        ),
+                    ));
+                }
+                Ordering::Equal => {}
+            }
             if property != worker.worker_node.property {
                 tracing::info!(
                     "worker {} property updated from {:?} to {:?}",
@@ -114,17 +160,22 @@ where
                     worker.worker_node.property,
                     property
                 );
+
                 worker.worker_node.property = property;
-                worker.insert(self.env.meta_store()).await?;
             }
+
+            worker.insert(self.env.meta_store()).await?;
+            // FIXME: should update cache after txn success.
             return Ok(worker.to_protobuf());
         }
+
         // Generate worker id.
         let worker_id = self
             .env
             .id_gen_manager()
             .generate::<{ IdCategory::Worker }>()
             .await? as WorkerId;
+
         // Generate parallel units.
         let parallel_units = if r#type == WorkerType::ComputeNode {
             self.generate_cn_parallel_units(worker_node_parallelism, worker_id)
@@ -141,6 +192,7 @@ where
             parallel_units,
             property,
         };
+
         let worker = Worker::from_protobuf(worker_node.clone());
         // Persist worker node.
         worker.insert(self.env.meta_store()).await?;
@@ -152,21 +204,63 @@ where
     pub async fn activate_worker_node(&self, host_address: HostAddress) -> MetaResult<()> {
         let mut core = self.core.write().await;
         let mut worker = core.get_worker_by_host_checked(host_address.clone())?;
-        if worker.worker_node.state == State::Running as i32 {
-            return Ok(());
+        if worker.worker_node.state != State::Running as i32 {
+            worker.worker_node.state = State::Running as i32;
+            worker.insert(self.env.meta_store()).await?;
+            core.update_worker_node(worker.clone());
         }
-        worker.worker_node.state = State::Running as i32;
-        worker.insert(self.env.meta_store()).await?;
-
-        core.update_worker_node(worker.clone());
 
         // Notify frontends of new compute node.
-        let worker_type = worker.worker_type();
-        if worker_type == WorkerType::ComputeNode {
+        // Always notify because a running worker's property may have been changed.
+        if worker.worker_type() == WorkerType::ComputeNode {
             self.env
                 .notification_manager()
-                .notify_frontend(Operation::Add, Info::Node(worker.worker_node))
+                .notify_frontend(Operation::Add, Info::Node(worker.worker_node.clone()))
                 .await;
+        }
+        self.env
+            .notification_manager()
+            .notify_local_subscribers(LocalNotification::WorkerNodeActivated(worker.worker_node))
+            .await;
+
+        Ok(())
+    }
+
+    pub async fn update_schedulability(
+        &self,
+        worker_ids: Vec<u32>,
+        schedulability: Schedulability,
+    ) -> MetaResult<()> {
+        let worker_ids: HashSet<_> = worker_ids.into_iter().collect();
+
+        let mut core = self.core.write().await;
+        let mut txn = Transaction::default();
+        let mut var_txns = vec![];
+
+        for worker in core.workers.values_mut() {
+            if worker_ids.contains(&worker.worker_node.id) {
+                if let Some(property) = worker.worker_node.property.as_mut() {
+                    let target = schedulability == Schedulability::Unschedulable;
+                    if property.is_unschedulable != target {
+                        let mut var_txn = VarTransaction::new(worker);
+                        var_txn
+                            .worker_node
+                            .property
+                            .as_mut()
+                            .unwrap()
+                            .is_unschedulable = target;
+
+                        var_txn.apply_to_txn(&mut txn)?;
+                        var_txns.push(var_txn);
+                    }
+                }
+            }
+        }
+
+        self.env.meta_store().txn(txn).await?;
+
+        for var_txn in var_txns {
+            var_txn.commit();
         }
 
         Ok(())
@@ -197,7 +291,7 @@ where
         // local notification.
         self.env
             .notification_manager()
-            .notify_local_subscribers(LocalNotification::WorkerNodeIsDeleted(worker_node))
+            .notify_local_subscribers(LocalNotification::WorkerNodeDeleted(worker_node))
             .await;
 
         Ok(worker_type)
@@ -218,7 +312,10 @@ where
                 return Ok(());
             }
         }
-        Err(MetaError::invalid_worker(worker_id))
+        Err(MetaError::invalid_worker(
+            worker_id,
+            "worker not found".into(),
+        ))
     }
 
     pub async fn start_heartbeat_checker(
@@ -316,7 +413,8 @@ where
         core.list_worker_node(worker_type, worker_state)
     }
 
-    /// A convenient method to get all running compute nodes that can be used for streaming.
+    /// A convenient method to get all running compute nodes that may have running actors on them
+    /// i.e. CNs which are running
     pub async fn list_active_streaming_compute_nodes(&self) -> Vec<WorkerNode> {
         let core = self.core.read().await;
         core.list_streaming_worker_node(Some(State::Running))
@@ -325,6 +423,13 @@ where
     pub async fn list_active_streaming_parallel_units(&self) -> Vec<ParallelUnit> {
         let core = self.core.read().await;
         core.list_active_streaming_parallel_units()
+    }
+
+    /// Get the cluster info used for scheduling a streaming job, containing all nodes that are
+    /// running and schedulable
+    pub async fn list_active_serving_compute_nodes(&self) -> Vec<WorkerNode> {
+        let core = self.core.read().await;
+        core.list_serving_worker_node(Some(State::Running))
     }
 
     /// Get the cluster info used for scheduling a streaming job.
@@ -336,12 +441,13 @@ where
     fn parse_property(
         &self,
         worker_type: WorkerType,
-        worker_property: RegisterProperty,
+        worker_property: AddNodeProperty,
     ) -> Option<Property> {
         if worker_type == WorkerType::ComputeNode {
             Some(Property {
                 is_streaming: worker_property.is_streaming,
                 is_serving: worker_property.is_serving,
+                is_unschedulable: worker_property.is_unschedulable,
             })
         } else {
             None
@@ -381,6 +487,9 @@ pub struct StreamingClusterInfo {
 
     /// All parallel units of the **active** compute nodes in the cluster.
     pub parallel_units: HashMap<ParallelUnitId, ParallelUnit>,
+
+    /// All unschedulable parallel units of compute nodes in the cluster.
+    pub unschedulable_parallel_units: HashMap<ParallelUnitId, ParallelUnit>,
 }
 
 pub struct ClusterManagerCore {
@@ -435,6 +544,7 @@ impl ClusterManagerCore {
     fn add_worker_node(&mut self, worker: Worker) {
         self.parallel_units
             .extend(worker.worker_node.parallel_units.clone());
+
         self.workers
             .insert(WorkerKey(worker.key().unwrap()), worker);
     }
@@ -460,13 +570,15 @@ impl ClusterManagerCore {
         worker_type: WorkerType,
         worker_state: Option<State>,
     ) -> Vec<WorkerNode> {
+        let worker_state = worker_state.map(|worker_state| worker_state as i32);
+
         self.workers
             .values()
             .map(|worker| worker.to_protobuf())
             .filter(|w| w.r#type == worker_type as i32)
             .filter(|w| match worker_state {
                 None => true,
-                Some(state) => state as i32 == w.state,
+                Some(state) => state == w.state,
             })
             .collect_vec()
     }
@@ -475,6 +587,14 @@ impl ClusterManagerCore {
         self.list_worker_node(WorkerType::ComputeNode, worker_state)
             .into_iter()
             .filter(|w| w.property.as_ref().map_or(false, |p| p.is_streaming))
+            .collect()
+    }
+
+    // List all parallel units on running nodes
+    pub fn list_serving_worker_node(&self, worker_state: Option<State>) -> Vec<WorkerNode> {
+        self.list_worker_node(WorkerType::ComputeNode, worker_state)
+            .into_iter()
+            .filter(|w| w.property.as_ref().map_or(false, |p| p.is_serving))
             .collect()
     }
 
@@ -492,9 +612,20 @@ impl ClusterManagerCore {
             .collect()
     }
 
+    // Lists active worker nodes
     fn get_streaming_cluster_info(&self) -> StreamingClusterInfo {
-        let active_workers: HashMap<_, _> = self
-            .list_streaming_worker_node(Some(State::Running))
+        let mut streaming_worker_node = self.list_streaming_worker_node(Some(State::Running));
+
+        let unschedulable_worker_node = streaming_worker_node
+            .drain_filter(|worker| {
+                worker
+                    .property
+                    .as_ref()
+                    .map_or(false, |p| p.is_unschedulable)
+            })
+            .collect_vec();
+
+        let active_workers: HashMap<_, _> = streaming_worker_node
             .into_iter()
             .map(|w| (w.id, w))
             .collect();
@@ -506,9 +637,15 @@ impl ClusterManagerCore {
             .map(|p| (p.id, p.clone()))
             .collect();
 
+        let unschedulable_parallel_units = unschedulable_worker_node
+            .iter()
+            .flat_map(|worker| worker.parallel_units.iter().map(|p| (p.id, p.clone())))
+            .collect();
+
         StreamingClusterInfo {
             worker_nodes: active_workers,
             parallel_units: active_parallel_units,
+            unschedulable_parallel_units,
         }
     }
 
@@ -563,10 +700,11 @@ mod tests {
                 .add_worker_node(
                     WorkerType::ComputeNode,
                     fake_host_address,
-                    RegisterProperty {
+                    AddNodeProperty {
                         worker_node_parallelism: fake_parallelism as _,
                         is_streaming: true,
                         is_serving: true,
+                        is_unschedulable: false,
                     },
                 )
                 .await
@@ -609,6 +747,53 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_cluster_manager_schedulability() -> MetaResult<()> {
+        let env = MetaSrvEnv::for_test().await;
+
+        let cluster_manager = Arc::new(
+            ClusterManager::new(env.clone(), Duration::new(0, 0))
+                .await
+                .unwrap(),
+        );
+        let worker_node = cluster_manager
+            .add_worker_node(
+                WorkerType::ComputeNode,
+                HostAddress {
+                    host: "127.0.0.1".to_string(),
+                    port: 1,
+                },
+                AddNodeProperty {
+                    worker_node_parallelism: 1,
+                    is_streaming: true,
+                    is_serving: true,
+                    is_unschedulable: false,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!worker_node.property.as_ref().unwrap().is_unschedulable);
+
+        cluster_manager
+            .activate_worker_node(worker_node.get_host().unwrap().clone())
+            .await
+            .unwrap();
+
+        cluster_manager
+            .update_schedulability(vec![worker_node.id], Schedulability::Unschedulable)
+            .await
+            .unwrap();
+
+        let worker_nodes = cluster_manager.list_active_streaming_compute_nodes().await;
+
+        let worker_node = &worker_nodes[0];
+
+        assert!(worker_node.property.as_ref().unwrap().is_unschedulable);
+
+        Ok(())
+    }
+
     async fn assert_cluster_manager(
         cluster_manager: &ClusterManager<MemStore>,
         parallel_count: usize,
@@ -633,10 +818,11 @@ mod tests {
             .add_worker_node(
                 WorkerType::ComputeNode,
                 fake_host_address_2,
-                RegisterProperty {
+                AddNodeProperty {
                     worker_node_parallelism: fake_parallelism as _,
                     is_streaming: true,
                     is_serving: true,
+                    is_unschedulable: false,
                 },
             )
             .await

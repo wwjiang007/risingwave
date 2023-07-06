@@ -26,7 +26,6 @@ use risingwave_common::row::{OwnedRow, RowExt};
 use risingwave_common::types::{Datum, ScalarImpl};
 use risingwave_common::util::row_serde::OrderedRowSerde;
 use risingwave_common::util::sort_util::OrderType;
-use risingwave_common_proc_macro::EstimateSize;
 use risingwave_expr::agg::{AggCall, AggKind};
 use risingwave_storage::store::PrefetchOptions;
 use risingwave_storage::StateStore;
@@ -35,6 +34,7 @@ use super::agg_state_cache::{AggStateCache, GenericAggStateCache, StateCacheInpu
 use super::minput_agg_impl::array_agg::ArrayAgg;
 use super::minput_agg_impl::extreme::ExtremeAgg;
 use super::minput_agg_impl::string_agg::StringAgg;
+use super::GroupKey;
 use crate::common::cache::{OrderedStateCache, TopNStateCache};
 use crate::common::table::state_table::StateTable;
 use crate::common::StateTableColumnMapping;
@@ -93,7 +93,16 @@ impl<S: StateStore> MaterializedInputState<S> {
                 agg_call
                     .column_orders
                     .iter()
-                    .map(|p| (p.column_index, p.order_type))
+                    .map(|p| {
+                        (
+                            p.column_index,
+                            if agg_call.kind == AggKind::LastValue {
+                                p.order_type.reverse()
+                            } else {
+                                p.order_type
+                            },
+                        )
+                    })
                     .unzip()
             };
 
@@ -128,7 +137,7 @@ impl<S: StateStore> MaterializedInputState<S> {
         let cache_key_serializer = OrderedRowSerde::new(cache_key_data_types, order_types);
 
         let cache: Box<dyn AggStateCache + Send + Sync> = match agg_call.kind {
-            AggKind::Min | AggKind::Max | AggKind::FirstValue => Box::new(
+            AggKind::Min | AggKind::Max | AggKind::FirstValue | AggKind::LastValue => Box::new(
                 GenericAggStateCache::new(TopNStateCache::new(extreme_cache_size), ExtremeAgg),
             ),
             AggKind::StringAgg => Box::new(GenericAggStateCache::new(
@@ -178,14 +187,14 @@ impl<S: StateStore> MaterializedInputState<S> {
     pub async fn get_output(
         &mut self,
         state_table: &StateTable<S>,
-        group_key: Option<&OwnedRow>,
+        group_key: Option<&GroupKey>,
     ) -> StreamExecutorResult<Datum> {
         if !self.cache.is_synced() {
             let mut cache_filler = self.cache.begin_syncing();
 
             let all_data_iter = state_table
                 .iter_with_pk_prefix(
-                    &group_key,
+                    group_key.map(GroupKey::table_pk),
                     PrefetchOptions {
                         exhaust_iter: cache_filler.capacity().is_none(),
                     },
@@ -204,7 +213,7 @@ impl<S: StateStore> MaterializedInputState<S> {
                             .project(&self.state_table_order_col_indices),
                         &mut cache_key,
                     );
-                    cache_key
+                    cache_key.into()
                 };
                 let cache_value = self
                     .state_table_arg_col_indices
@@ -234,14 +243,15 @@ mod tests {
     use risingwave_common::types::{DataType, ScalarImpl};
     use risingwave_common::util::epoch::EpochPair;
     use risingwave_common::util::iter_util::ZipEqFast;
-    use risingwave_common::util::sort_util::{ColumnOrder, OrderType};
-    use risingwave_expr::agg::{AggArgs, AggCall, AggKind};
+    use risingwave_common::util::sort_util::OrderType;
+    use risingwave_expr::agg::AggCall;
     use risingwave_storage::memory::MemoryStateStore;
     use risingwave_storage::StateStore;
 
     use super::MaterializedInputState;
     use crate::common::table::state_table::StateTable;
     use crate::common::StateTableColumnMapping;
+    use crate::executor::aggregation::GroupKey;
     use crate::executor::StreamExecutorResult;
 
     fn create_chunk<S: StateStore>(
@@ -288,17 +298,6 @@ mod tests {
         (table, mapping)
     }
 
-    fn create_extreme_agg_call(kind: AggKind, arg_type: DataType, arg_idx: usize) -> AggCall {
-        AggCall {
-            kind,
-            args: AggArgs::Unary(arg_type.clone(), arg_idx),
-            return_type: arg_type,
-            column_orders: vec![],
-            filter: None,
-            distinct: false,
-        }
-    }
-
     #[tokio::test]
     async fn test_extreme_agg_state_basic_min() -> StreamExecutorResult<()> {
         // Assumption of input schema:
@@ -311,7 +310,7 @@ mod tests {
         let field4 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2, field3, field4]);
 
-        let agg_call = create_extreme_agg_call(AggKind::Min, DataType::Int32, 2); // min(c)
+        let agg_call = AggCall::from_pretty("(min:int4 $2:int4)"); // min(c)
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(
@@ -420,7 +419,7 @@ mod tests {
         let field4 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2, field3, field4]);
 
-        let agg_call = create_extreme_agg_call(AggKind::Max, DataType::Int32, 2); // max(c)
+        let agg_call = AggCall::from_pretty("(max:int4 $2:int4)"); // max(c)
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(
@@ -529,8 +528,8 @@ mod tests {
         let field4 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2, field3, field4]);
 
-        let agg_call_1 = create_extreme_agg_call(AggKind::Min, DataType::Varchar, 0); // min(a)
-        let agg_call_2 = create_extreme_agg_call(AggKind::Max, DataType::Varchar, 1); // max(b)
+        let agg_call_1 = AggCall::from_pretty("(min:varchar $0:varchar)"); // min(a)
+        let agg_call_2 = AggCall::from_pretty("(max:varchar $1:varchar)"); // max(b)
         let group_key = None;
 
         let (mut table_1, mapping_1) = create_mem_state_table(
@@ -639,8 +638,8 @@ mod tests {
         let field4 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2, field3, field4]);
 
-        let agg_call = create_extreme_agg_call(AggKind::Max, DataType::Int32, 1); // max(b)
-        let group_key = Some(OwnedRow::new(vec![Some(8.into())]));
+        let agg_call = AggCall::from_pretty("(max:int4 $1:int4)"); // max(b)
+        let group_key = Some(GroupKey::new(OwnedRow::new(vec![Some(8.into())]), None));
 
         let (mut table, mapping) = create_mem_state_table(
             &input_schema,
@@ -746,7 +745,7 @@ mod tests {
         let field2 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2]);
 
-        let agg_call = create_extreme_agg_call(AggKind::Min, DataType::Int32, 0); // min(a)
+        let agg_call = AggCall::from_pretty("(min:int4 $0:int4)"); // min(a)
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(
@@ -860,7 +859,7 @@ mod tests {
         let field2 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2]);
 
-        let agg_call = create_extreme_agg_call(AggKind::Min, DataType::Int32, 0); // min(a)
+        let agg_call = AggCall::from_pretty("(min:int4 $0:int4)"); // min(a)
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(
@@ -975,24 +974,17 @@ mod tests {
         // where `a` is the column to aggregate
 
         let input_pk_indices = vec![4];
-        let field1 = Field::unnamed(DataType::Varchar);
-        let field2 = Field::unnamed(DataType::Varchar);
-        let field3 = Field::unnamed(DataType::Int32);
-        let field4 = Field::unnamed(DataType::Int32);
-        let field5 = Field::unnamed(DataType::Int64);
-        let input_schema = Schema::new(vec![field1, field2, field3, field4, field5]);
+        let input_schema = Schema::new(vec![
+            Field::unnamed(DataType::Varchar),
+            Field::unnamed(DataType::Varchar),
+            Field::unnamed(DataType::Int32),
+            Field::unnamed(DataType::Int32),
+            Field::unnamed(DataType::Int64),
+        ]);
 
-        let agg_call = AggCall {
-            kind: AggKind::StringAgg,
-            args: AggArgs::Binary([DataType::Varchar, DataType::Varchar], [0, 1]),
-            return_type: DataType::Varchar,
-            column_orders: vec![
-                ColumnOrder::new(2, OrderType::ascending()),  // b ASC
-                ColumnOrder::new(0, OrderType::descending()), // a DESC
-            ],
-            filter: None,
-            distinct: false,
-        };
+        let agg_call = AggCall::from_pretty(
+            "(string_agg:varchar $0:varchar $1:varchar orderby $2:asc $0:desc)",
+        );
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(
@@ -1083,17 +1075,7 @@ mod tests {
         let field4 = Field::unnamed(DataType::Int64);
         let input_schema = Schema::new(vec![field1, field2, field3, field4]);
 
-        let agg_call = AggCall {
-            kind: AggKind::ArrayAgg,
-            args: AggArgs::Unary(DataType::Int32, 1), // array_agg(b)
-            return_type: DataType::Int32,
-            column_orders: vec![
-                ColumnOrder::new(2, OrderType::ascending()),  // c ASC
-                ColumnOrder::new(0, OrderType::descending()), // a DESC
-            ],
-            filter: None,
-            distinct: false,
-        };
+        let agg_call = AggCall::from_pretty("(array_agg:int4 $1:int4 orderby $2:asc $0:desc)");
         let group_key = None;
 
         let (mut table, mapping) = create_mem_state_table(

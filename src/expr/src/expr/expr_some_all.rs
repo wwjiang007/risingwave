@@ -17,7 +17,7 @@ use std::sync::Arc;
 use itertools::{multizip, Itertools};
 use risingwave_common::array::{Array, ArrayRef, BoolArray, DataChunk};
 use risingwave_common::row::OwnedRow;
-use risingwave_common::types::{DataType, Datum, Scalar, ScalarImpl, ScalarRefImpl};
+use risingwave_common::types::{DataType, Datum, ListRef, Scalar, ScalarImpl, ScalarRefImpl};
 use risingwave_common::util::iter_util::ZipEqFast;
 use risingwave_common::{bail, ensure};
 use risingwave_pb::expr::expr_node::{RexNode, Type};
@@ -92,7 +92,7 @@ impl Expression for SomeAllExpression {
         let capacity = arr_right_inner
             .iter()
             .flatten()
-            .map(|list_ref| list_ref.flatten().len())
+            .map(ListRef::flatten_len)
             .sum();
 
         let mut unfolded_arr_left_builder = arr_left.create_builder(capacity);
@@ -110,11 +110,12 @@ impl Expression for SomeAllExpression {
                 let datum_right = right.unwrap();
                 match datum_right {
                     ScalarRefImpl::List(array) => {
-                        let len = array.iter().len();
+                        let flattened = array.flatten();
+                        let len = flattened.len();
                         num_array.push(Some(len));
-                        unfolded_arr_left_builder.append_datum_n(len, left);
-                        for item in array.iter() {
-                            unfolded_arr_right_builder.append_datum(item);
+                        unfolded_arr_left_builder.append_n(len, left);
+                        for item in flattened {
+                            unfolded_arr_right_builder.append(item);
                         }
                     }
                     _ => unreachable!(),
@@ -142,12 +143,19 @@ impl Expression for SomeAllExpression {
             }
         }
 
+        assert_eq!(num_array.len(), data_chunk.capacity());
+
+        let unfolded_arr_left = unfolded_arr_left_builder.finish();
+        let unfolded_arr_right = unfolded_arr_right_builder.finish();
+
+        // Unfolded array are actually compacted, and the visibility of the output array will be
+        // further restored by `num_array`.
+        assert_eq!(unfolded_arr_left.len(), unfolded_arr_right.len());
+        let unfolded_compact_len = unfolded_arr_left.len();
+
         let data_chunk = DataChunk::new(
-            vec![
-                unfolded_arr_left_builder.finish().into(),
-                unfolded_arr_right_builder.finish().into(),
-            ],
-            capacity,
+            vec![unfolded_arr_left.into(), unfolded_arr_right.into()],
+            unfolded_compact_len,
         );
 
         let func_results = self.func.eval(&data_chunk).await?;
@@ -200,17 +208,17 @@ impl<'a> TryFrom<&'a ExprNode> for SomeAllExpression {
     type Error = ExprError;
 
     fn try_from(prost: &'a ExprNode) -> Result<Self> {
-        let outer_expr_type = prost.get_expr_type().unwrap();
+        let outer_expr_type = prost.get_function_type().unwrap();
         let (outer_children, outer_return_type) = get_children_and_return_type(prost)?;
         ensure!(matches!(outer_return_type, DataType::Boolean));
 
-        let mut inner_expr_type = outer_children[0].get_expr_type().unwrap();
+        let mut inner_expr_type = outer_children[0].get_function_type().unwrap();
         let (mut inner_children, mut inner_return_type) =
             get_children_and_return_type(&outer_children[0])?;
         let mut stack = vec![];
         while inner_children.len() != 2 {
             stack.push((inner_expr_type, inner_return_type));
-            inner_expr_type = inner_children[0].get_expr_type().unwrap();
+            inner_expr_type = inner_children[0].get_function_type().unwrap();
             (inner_children, inner_return_type) = get_children_and_return_type(&inner_children[0])?;
         }
 
@@ -223,17 +231,17 @@ impl<'a> TryFrom<&'a ExprNode> for SomeAllExpression {
 
         let eval_func = {
             let left_expr_input_ref = ExprNode {
-                expr_type: Type::InputRef as i32,
+                function_type: Type::Unspecified as i32,
                 return_type: Some(left_expr.return_type().to_protobuf()),
                 rex_node: Some(RexNode::InputRef(0)),
             };
             let right_expr_input_ref = ExprNode {
-                expr_type: Type::InputRef as i32,
+                function_type: Type::Unspecified as i32,
                 return_type: Some(right_expr_return_type.to_protobuf()),
                 rex_node: Some(RexNode::InputRef(1)),
             };
             let mut root_expr_node = ExprNode {
-                expr_type: inner_expr_type as i32,
+                function_type: inner_expr_type as i32,
                 return_type: Some(inner_return_type.to_protobuf()),
                 rex_node: Some(RexNode::FuncCall(FunctionCall {
                     children: vec![left_expr_input_ref, right_expr_input_ref],
@@ -241,7 +249,7 @@ impl<'a> TryFrom<&'a ExprNode> for SomeAllExpression {
             };
             while let Some((expr_type, return_type)) = stack.pop() {
                 root_expr_node = ExprNode {
-                    expr_type: expr_type as i32,
+                    function_type: expr_type as i32,
                     return_type: Some(return_type.to_protobuf()),
                     rex_node: Some(RexNode::FuncCall(FunctionCall {
                         children: vec![root_expr_node],

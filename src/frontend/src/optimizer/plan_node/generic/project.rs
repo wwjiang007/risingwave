@@ -17,7 +17,7 @@ use std::fmt;
 use std::fmt::Formatter;
 
 use fixedbitset::FixedBitSet;
-use itertools::Itertools;
+use pretty_xmlish::{Pretty, StrAssocArr};
 use risingwave_common::catalog::{Field, Schema};
 use risingwave_common::util::iter_util::ZipEqFast;
 
@@ -178,37 +178,32 @@ impl<PlanRef: GenericPlanRef> Project<PlanRef> {
     }
 
     pub fn fmt_fields_with_builder(&self, builder: &mut fmt::DebugStruct<'_, '_>, schema: &Schema) {
-        builder.field(
-            "exprs",
-            &self
-                .exprs
-                .iter()
-                .zip_eq_fast(schema.fields().iter())
-                .map(|(expr, field)| AliasedExpr {
-                    expr: ExprDisplay {
-                        expr,
-                        input_schema: self.input.schema(),
-                    },
-                    alias: {
-                        match expr {
-                            ExprImpl::InputRef(_) | ExprImpl::Literal(_) => None,
-                            _ => Some(field.name.clone()),
-                        }
-                    },
-                })
-                .collect_vec(),
-        );
+        builder.field("exprs", &self.exprs_for_display(schema));
     }
 
-    pub fn fmt_with_name(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        name: &str,
-        schema: &Schema,
-    ) -> fmt::Result {
-        let mut builder = f.debug_struct(name);
-        self.fmt_fields_with_builder(&mut builder, schema);
-        builder.finish()
+    pub fn fields_pretty<'a>(&self, schema: &Schema) -> StrAssocArr<'a> {
+        let f = |t| Pretty::debug(&t);
+        let e = Pretty::Array(self.exprs_for_display(schema).iter().map(f).collect());
+        vec![("exprs", e)]
+    }
+
+    fn exprs_for_display<'a>(&'a self, schema: &Schema) -> Vec<AliasedExpr<'a>> {
+        self.exprs
+            .iter()
+            .zip_eq_fast(schema.fields().iter())
+            .map(|(expr, field)| AliasedExpr {
+                expr: ExprDisplay {
+                    expr,
+                    input_schema: self.input.schema(),
+                },
+                alias: {
+                    match expr {
+                        ExprImpl::InputRef(_) | ExprImpl::Literal(_) => None,
+                        _ => Some(field.name.clone()),
+                    }
+                },
+            })
+            .collect()
     }
 
     pub fn o2i_col_mapping(&self) -> ColIndexMapping {
