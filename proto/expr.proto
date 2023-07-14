@@ -391,7 +391,6 @@ message WindowFunction {
 // Note: due to historic reasons, UserDefinedFunction is a oneof variant parallel to FunctionCall,
 // while UserDefinedTableFunction is embedded as a field in TableFunction.
 
-
 message UserDefinedFunction {
   repeated ExprNode children = 1;
   string name = 2;
@@ -400,7 +399,7 @@ message UserDefinedFunction {
   // external function service only
   string link = 5;
   // An unique identifier for the function. Different kinds of UDF may handle this field differently.
-  // - For external UDF, it's the name of the function in the external function service. 
+  // - For external UDF, it's the name of the function in the external function service.
   //   It doesn't need to be unique across different external function servers.
   // - For wasm UDF, it's the name of the function stored in remote object store, and needs to be globally unique.
   string identifier = 6;
