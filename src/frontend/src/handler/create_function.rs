@@ -153,7 +153,7 @@ pub async fn handle_create_function(
                         .try_collect()?,
                 );
                 let returns = arrow_schema::Schema::new(match kind {
-                    Kind::Scalar(_) => vec![to_field(return_type.clone().into())],
+                    Kind::Scalar(_) => vec![to_field(return_type.clone().try_into()?)],
                     Kind::Table(_) => vec![
                         arrow_schema::Field::new("row_index", arrow_schema::DataType::Int32, true),
                         to_field(return_type.clone().try_into()?),
