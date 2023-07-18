@@ -57,7 +57,7 @@ pub(crate) enum WorkerId {
 #[async_trait::async_trait]
 pub trait LocalReplay: LocalReplayRead + ReplayWrite + Send + Sync {
     fn init(&mut self, epoch: u64);
-    fn seal_current_epoch(&mut self, next_epoch: u64);
+    fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool);
     fn is_dirty(&self) -> bool;
     fn epoch(&self) -> u64;
     async fn flush(
@@ -182,7 +182,7 @@ mock! {
     #[async_trait::async_trait]
     impl LocalReplay for LocalReplayInterface{
         fn init(&mut self, epoch: u64);
-        fn seal_current_epoch(&mut self, next_epoch: u64);
+        fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool);
         fn is_dirty(&self) -> bool;
         fn epoch(&self) -> u64;
         async fn flush(&mut self, delete_ranges: Vec<(Bound<TracedBytes>, Bound<TracedBytes>)>) -> Result<usize>;

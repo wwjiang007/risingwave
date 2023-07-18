@@ -252,7 +252,7 @@ mod tests {
     use crate::common::table::state_table::StateTable;
     use crate::common::StateTableColumnMapping;
     use crate::executor::aggregation::GroupKey;
-    use crate::executor::StreamExecutorResult;
+    use crate::executor::{Barrier, StreamExecutorResult};
 
     fn create_chunk<S: StateStore>(
         pretty: &str,
@@ -350,7 +350,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -375,7 +378,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -459,7 +465,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -484,7 +493,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -606,8 +618,14 @@ mod tests {
                 })?;
 
             epoch.inc();
-            table_1.commit(epoch).await.unwrap();
-            table_2.commit(epoch).await.unwrap();
+            table_1
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
+            table_2
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             match state_1.get_output(&table_1, group_key.as_ref()).await? {
                 Some(ScalarImpl::Utf8(s)) => {
@@ -678,7 +696,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -703,7 +724,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -801,7 +825,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -835,7 +862,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -897,7 +927,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -924,7 +957,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -953,7 +989,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -1024,7 +1063,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -1048,7 +1090,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -1114,7 +1159,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {
@@ -1143,7 +1191,10 @@ mod tests {
             state.apply_chunk(&ops, visibility.as_ref(), &columns)?;
 
             epoch.inc();
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
 
             let res = state.get_output(&table, group_key.as_ref()).await?;
             match res {

@@ -148,9 +148,9 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
             if i + 1 < epochs.len() {
-                local.seal_current_epoch(epochs[i + 1]);
+                local.seal_current_epoch(epochs[i + 1], true);
             } else {
-                local.seal_current_epoch(u64::MAX);
+                local.seal_current_epoch(u64::MAX, true);
             }
             let ssts = storage
                 .seal_and_sync_epoch(epoch)
@@ -526,7 +526,7 @@ pub(crate) mod tests {
                 local.insert(Bytes::from(key), val.clone(), None).unwrap();
             }
             local.flush(Vec::new()).await.unwrap();
-            local.seal_current_epoch(epoch + 1);
+            local.seal_current_epoch(epoch + 1, true);
 
             flush_and_commit(&hummock_meta_client, storage, epoch).await;
         }
@@ -691,8 +691,8 @@ pub(crate) mod tests {
 
             storage.insert(prefix.freeze(), val.clone(), None).unwrap();
             storage.flush(Vec::new()).await.unwrap();
-            storage.seal_current_epoch(next_epoch);
-            other.seal_current_epoch(next_epoch);
+            storage.seal_current_epoch(next_epoch, true);
+            other.seal_current_epoch(next_epoch, true);
 
             let ssts = global_storage
                 .seal_and_sync_epoch(epoch)
@@ -863,7 +863,7 @@ pub(crate) mod tests {
 
             local.insert(prefix.freeze(), val.clone(), None).unwrap();
             local.flush(Vec::new()).await.unwrap();
-            local.seal_current_epoch(next_epoch);
+            local.seal_current_epoch(next_epoch, true);
 
             let ssts = storage
                 .seal_and_sync_epoch(epoch)
@@ -1046,7 +1046,7 @@ pub(crate) mod tests {
                 .insert(Bytes::from(ramdom_key), val.clone(), None)
                 .unwrap();
             local.flush(Vec::new()).await.unwrap();
-            local.seal_current_epoch(next_epoch);
+            local.seal_current_epoch(next_epoch, true);
             let ssts = storage
                 .seal_and_sync_epoch(epoch)
                 .await
@@ -1207,7 +1207,7 @@ pub(crate) mod tests {
             .flush(vec![prefix_key_range(1u16), prefix_key_range(2u16)])
             .await
             .unwrap();
-        local.seal_current_epoch(u64::MAX);
+        local.seal_current_epoch(u64::MAX, true);
 
         flush_and_commit(&hummock_meta_client, &storage, 130).await;
         let compactor_manager = hummock_manager_ref.compactor_manager_ref_for_test();

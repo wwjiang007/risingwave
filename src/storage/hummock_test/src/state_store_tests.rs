@@ -154,7 +154,7 @@ async fn test_basic_inner(
         .unwrap();
 
     let epoch2 = epoch1 + 1;
-    local.seal_current_epoch(epoch2);
+    local.seal_current_epoch(epoch2, true);
 
     // Get the value after flushing to remote.
     let value = hummock_storage
@@ -230,7 +230,7 @@ async fn test_basic_inner(
         .unwrap();
 
     let epoch3 = epoch2 + 1;
-    local.seal_current_epoch(epoch3);
+    local.seal_current_epoch(epoch3, true);
 
     // Get the value after flushing to remote.
     let value = hummock_storage
@@ -267,7 +267,7 @@ async fn test_basic_inner(
         .await
         .unwrap();
 
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
 
     // Get the value after flushing to remote.
     let value = hummock_storage
@@ -536,7 +536,7 @@ async fn test_state_store_sync_inner(
     // );
 
     epoch += 1;
-    local.seal_current_epoch(epoch);
+    local.seal_current_epoch(epoch, true);
 
     // ingest more 8B then will trigger a sync behind the scene
     let mut batch3 = vec![(
@@ -564,7 +564,7 @@ async fn test_state_store_sync_inner(
     //     hummock_storage.shared_buffer_manager().size() as u64
     // );
 
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
 
     // trigger a sync
     hummock_storage
@@ -1124,7 +1124,7 @@ async fn test_write_anytime_inner(
     assert_new_value(epoch1).await;
 
     let epoch2 = epoch1 + 1;
-    local.seal_current_epoch(epoch2);
+    local.seal_current_epoch(epoch2, true);
 
     // Write to epoch2
     local
@@ -1138,7 +1138,7 @@ async fn test_write_anytime_inner(
         )
         .await
         .unwrap();
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
     // Assert epoch 1 unchanged
     assert_new_value(epoch1).await;
     // Assert epoch 2 correctness
@@ -1193,15 +1193,15 @@ async fn test_delete_get_inner(
         )
         .await
         .unwrap();
+    let epoch2 = initial_epoch + 2;
+    local.seal_current_epoch(epoch2, true);
     let ssts = hummock_storage
         .seal_and_sync_epoch(epoch1)
         .await
         .unwrap()
         .uncommitted_ssts;
     meta_client.commit_epoch(epoch1, ssts).await.unwrap();
-    let epoch2 = initial_epoch + 2;
 
-    local.seal_current_epoch(epoch2);
     let batch2 = vec![(Bytes::from("bb"), StorageValue::new_delete())];
     local
         .ingest_batch(
@@ -1214,7 +1214,7 @@ async fn test_delete_get_inner(
         )
         .await
         .unwrap();
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
     let ssts = hummock_storage
         .seal_and_sync_epoch(epoch2)
         .await
@@ -1277,7 +1277,7 @@ async fn test_multiple_epoch_sync_inner(
         .unwrap();
 
     let epoch2 = initial_epoch + 2;
-    local.seal_current_epoch(epoch2);
+    local.seal_current_epoch(epoch2, false);
     let batch2 = vec![(Bytes::from("bb"), StorageValue::new_delete())];
     local
         .ingest_batch(
@@ -1296,7 +1296,7 @@ async fn test_multiple_epoch_sync_inner(
         (Bytes::from("aa"), StorageValue::new_put("444")),
         (Bytes::from("bb"), StorageValue::new_put("555")),
     ];
-    local.seal_current_epoch(epoch3);
+    local.seal_current_epoch(epoch3, true);
     local
         .ingest_batch(
             batch3,
@@ -1308,7 +1308,7 @@ async fn test_multiple_epoch_sync_inner(
         )
         .await
         .unwrap();
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
     let test_get = || {
         let hummock_storage_clone = &hummock_storage;
         async move {
@@ -1430,7 +1430,7 @@ async fn test_gc_watermark_and_clear_shared_buffer() {
     );
 
     let epoch2 = initial_epoch + 2;
-    local_hummock_storage.seal_current_epoch(epoch2);
+    local_hummock_storage.seal_current_epoch(epoch2, true);
     local_hummock_storage
         .delete(Bytes::from("bb"), Bytes::from("222"))
         .unwrap();
@@ -1450,7 +1450,7 @@ async fn test_gc_watermark_and_clear_shared_buffer() {
             .min()
             .unwrap()
     };
-    local_hummock_storage.seal_current_epoch(u64::MAX);
+    local_hummock_storage.seal_current_epoch(u64::MAX, true);
     let sync_result1 = hummock_storage.seal_and_sync_epoch(epoch1).await.unwrap();
     let min_object_id_epoch1 = min_object_id(&sync_result1);
     assert_eq!(

@@ -126,7 +126,7 @@ async fn test_snapshot_inner(
         .await
         .unwrap();
     let epoch2 = epoch1 + 1;
-    local.seal_current_epoch(epoch2);
+    local.seal_current_epoch(epoch2, true);
     if enable_sync {
         let ssts = hummock_storage
             .seal_and_sync_epoch(epoch1)
@@ -162,7 +162,7 @@ async fn test_snapshot_inner(
         .await
         .unwrap();
     let epoch3 = epoch2 + 1;
-    local.seal_current_epoch(epoch3);
+    local.seal_current_epoch(epoch3, true);
     if enable_sync {
         let ssts = hummock_storage
             .seal_and_sync_epoch(epoch2)
@@ -198,7 +198,7 @@ async fn test_snapshot_inner(
         )
         .await
         .unwrap();
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
     if enable_sync {
         let ssts = hummock_storage
             .seal_and_sync_epoch(epoch3)
@@ -249,7 +249,7 @@ async fn test_snapshot_range_scan_inner(
         )
         .await
         .unwrap();
-    local.seal_current_epoch(u64::MAX);
+    local.seal_current_epoch(u64::MAX, true);
     if enable_sync {
         let ssts = hummock_storage
             .seal_and_sync_epoch(epoch)

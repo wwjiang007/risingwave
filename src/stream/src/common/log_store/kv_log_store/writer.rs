@@ -118,7 +118,8 @@ impl<LS: LocalStateStore> LogWriter for KvLogStoreWriter<LS> {
                 }
             }
             self.state_store.flush(delete_range).await?;
-            self.state_store.seal_current_epoch(next_epoch);
+            self.state_store
+                .seal_current_epoch(next_epoch, is_checkpoint);
             self.tx.barrier(is_checkpoint, next_epoch);
             self.seq_id = FIRST_SEQ_ID;
             Ok(())

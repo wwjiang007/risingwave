@@ -25,7 +25,6 @@ use risingwave_common::buffer::{Bitmap, BitmapBuilder};
 use risingwave_common::catalog::Schema;
 use risingwave_common::hash::{HashKey, PrecomputedBuildHasher};
 use risingwave_common::types::ScalarImpl;
-use risingwave_common::util::epoch::EpochPair;
 use risingwave_common::util::iter_util::ZipEqFast;
 use risingwave_expr::agg::AggCall;
 use risingwave_storage::StateStore;
@@ -47,7 +46,7 @@ use crate::error::StreamResult;
 use crate::executor::aggregation::{generate_agg_schema, AggGroup as GenericAggGroup};
 use crate::executor::error::StreamExecutorError;
 use crate::executor::monitor::StreamingMetrics;
-use crate::executor::{BoxedMessageStream, Executor, Message};
+use crate::executor::{Barrier, BoxedMessageStream, Executor, Message};
 use crate::task::AtomicU64Ref;
 
 type AggGroup<S> = GenericAggGroup<S, OnlyOutputIfHasInput>;
@@ -415,7 +414,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
     async fn flush_data<'a>(
         this: &'a mut ExecutorInner<K, S>,
         vars: &'a mut ExecutionVars<K, S>,
-        epoch: EpochPair,
+        barrier: &'a Barrier,
     ) {
         // Update metrics.
         let actor_id_str = this.actor_ctx.id.to_string();
@@ -530,7 +529,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
         if n_dirty_group == 0 && window_watermark.is_none() {
             // Nothing is expected to be changed.
             this.all_state_tables_mut().for_each(|table| {
-                table.commit_no_data_expected(epoch);
+                table.empty_barrier_expected(barrier);
             });
         } else {
             if let Some(watermark) = window_watermark {
@@ -541,7 +540,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
             // Commit all state tables.
             futures::future::try_join_all(
                 this.all_state_tables_mut()
-                    .map(|table| async { table.commit(epoch).await }),
+                    .map(|table| async { table.barrier(barrier).await }),
             )
             .await?;
         }
@@ -634,7 +633,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
                 }
                 Message::Barrier(barrier) => {
                     #[for_await]
-                    for chunk in Self::flush_data(&mut this, &mut vars, barrier.epoch) {
+                    for chunk in Self::flush_data(&mut this, &mut vars, &barrier) {
                         yield Message::Chunk(chunk?);
                     }
 

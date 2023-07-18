@@ -350,9 +350,9 @@ where
                 }
 
                 if upstream_chunk_buffer_is_empty {
-                    upstream_table.commit_no_data_expected(barrier.epoch)
+                    upstream_table.empty_barrier_expected(&barrier)
                 } else {
-                    upstream_table.commit(barrier.epoch).await?;
+                    upstream_table.barrier(&barrier).await?;
                 }
 
                 self.metrics
@@ -382,7 +382,7 @@ where
 
                 // Persist state on barrier
                 persist_state_per_vnode(
-                    barrier.epoch,
+                    &barrier,
                     &mut self.state_table,
                     false,
                     &mut backfill_state,
@@ -420,7 +420,7 @@ where
                     }
 
                     persist_state_per_vnode(
-                        barrier.epoch,
+                        barrier,
                         &mut self.state_table,
                         false,
                         &mut backfill_state,
@@ -443,7 +443,7 @@ where
         for msg in upstream {
             if let Some(msg) = mapping_message(msg?, &self.output_indices) {
                 if let Message::Barrier(barrier) = &msg {
-                    self.state_table.commit_no_data_expected(barrier.epoch);
+                    self.state_table.empty_barrier_expected(barrier);
                 }
                 yield msg;
             }

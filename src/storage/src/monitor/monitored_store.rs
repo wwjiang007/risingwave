@@ -277,9 +277,9 @@ impl<S: LocalStateStore> LocalStateStore for MonitoredStateStore<S> {
         self.inner.init(epoch)
     }
 
-    fn seal_current_epoch(&mut self, next_epoch: u64) {
+    fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
         // TODO: may collect metrics
-        self.inner.seal_current_epoch(next_epoch)
+        self.inner.seal_current_epoch(next_epoch, is_checkpoint)
     }
 }
 

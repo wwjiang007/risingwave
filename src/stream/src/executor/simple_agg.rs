@@ -240,7 +240,7 @@ impl<S: StateStore> SimpleAggExecutor<S> {
     async fn flush_data(
         this: &mut ExecutorInner<S>,
         vars: &mut ExecutionVars<S>,
-        epoch: EpochPair,
+        barrier: &Barrier,
     ) -> StreamExecutorResult<Option<StreamChunk>> {
         let chunk = if vars.state_changed || vars.agg_group.is_uninitialized() {
             // Flush agg states.
@@ -255,7 +255,7 @@ impl<S: StateStore> SimpleAggExecutor<S> {
             // Commit all state tables except for result table.
             futures::future::try_join_all(
                 this.all_state_tables_except_result_mut()
-                    .map(|table| table.commit(epoch)),
+                    .map(|table| table.barrier(barrier)),
             )
             .await?;
 
@@ -264,12 +264,12 @@ impl<S: StateStore> SimpleAggExecutor<S> {
             match vars.agg_group.build_change(curr_outputs) {
                 Some(change) => {
                     this.result_table.write_record(change.as_ref());
-                    this.result_table.commit(epoch).await?;
+                    this.result_table.barrier(barrier).await?;
                     Some(change.to_stream_chunk(&this.info.schema.data_types()))
                 }
                 None => {
                     // Agg result is not changed.
-                    this.result_table.commit_no_data_expected(epoch);
+                    this.result_table.empty_barrier_expected(barrier);
                     None
                 }
             }
@@ -277,7 +277,7 @@ impl<S: StateStore> SimpleAggExecutor<S> {
             // No state is changed.
             // Call commit on state table to increment the epoch.
             this.all_state_tables_mut().for_each(|table| {
-                table.commit_no_data_expected(epoch);
+                table.empty_barrier_expected(barrier);
             });
             None
         };
@@ -337,9 +337,7 @@ impl<S: StateStore> SimpleAggExecutor<S> {
                     Self::apply_chunk(&mut this, &mut vars, chunk).await?;
                 }
                 Message::Barrier(barrier) => {
-                    if let Some(chunk) =
-                        Self::flush_data(&mut this, &mut vars, barrier.epoch).await?
-                    {
+                    if let Some(chunk) = Self::flush_data(&mut this, &mut vars, &barrier).await? {
                         yield Message::Chunk(chunk);
                     }
                     vars.distinct_dedup.dedup_caches_mut().for_each(|cache| {

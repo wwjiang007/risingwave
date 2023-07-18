@@ -323,7 +323,7 @@ mod tests {
 
     use super::*;
     use crate::executor::monitor::StreamingMetrics;
-    use crate::executor::ActorContext;
+    use crate::executor::{ActorContext, Barrier};
 
     async fn infer_dedup_tables<S: StateStore>(
         agg_calls: &[AggCall],
@@ -466,7 +466,10 @@ mod tests {
 
         epoch.inc();
         for table in dedup_tables.values_mut() {
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
         }
 
         // --- chunk 2 ---
@@ -516,7 +519,10 @@ mod tests {
 
         epoch.inc();
         for table in dedup_tables.values_mut() {
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
         }
 
         // test recovery
@@ -590,7 +596,10 @@ mod tests {
 
         epoch.inc();
         for table in dedup_tables.values_mut() {
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
         }
     }
 
@@ -670,7 +679,10 @@ mod tests {
 
         epoch.inc();
         for table in dedup_tables.values_mut() {
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
         }
 
         let chunk = StreamChunk::from_pretty(
@@ -724,7 +736,10 @@ mod tests {
 
         epoch.inc();
         for table in dedup_tables.values_mut() {
-            table.commit(epoch).await.unwrap();
+            table
+                .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+                .await
+                .unwrap();
         }
     }
 }

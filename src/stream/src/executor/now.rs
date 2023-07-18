@@ -132,9 +132,9 @@ impl<S: StateStore> NowExecutor<S> {
                 state_table.insert(row::once(timestamp.to_datum_ref()));
                 last_timestamp = timestamp;
 
-                state_table.commit(barrier.epoch).await?;
+                state_table.barrier(&barrier).await?;
             } else {
-                state_table.commit_no_data_expected(barrier.epoch);
+                state_table.empty_barrier_expected(&barrier);
             }
             if let Some(mutation) = barrier.mutation.as_deref() {
                 match mutation {

@@ -402,7 +402,7 @@ impl<S: StateStore> EowcOverWindowExecutor<S> {
                     }
                 }
                 Message::Barrier(barrier) => {
-                    this.state_table.commit(barrier.epoch).await?;
+                    this.state_table.barrier(&barrier).await?;
                     vars.partitions.evict();
 
                     if let Some(vnode_bitmap) = barrier.as_update_vnode_bitmap(this.actor_ctx.id) {

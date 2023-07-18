@@ -330,7 +330,7 @@ impl LocalStateStore for LocalHummockStorage {
         );
     }
 
-    fn seal_current_epoch(&mut self, next_epoch: u64) {
+    fn seal_current_epoch(&mut self, next_epoch: u64, _is_checkpoint: bool) {
         assert!(!self.is_dirty());
         let prev_epoch = self
             .epoch

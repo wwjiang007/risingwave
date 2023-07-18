@@ -14,13 +14,13 @@
 
 use futures::{pin_mut, StreamExt};
 use risingwave_common::row::{OwnedRow, Row, RowExt};
-use risingwave_common::util::epoch::EpochPair;
 use risingwave_storage::store::PrefetchOptions;
 use risingwave_storage::StateStore;
 
 use super::{serialize_pk_to_cache_key, CacheKey, CacheKeySerde, GroupKey, TopNCache};
 use crate::common::table::state_table::StateTable;
 use crate::executor::error::StreamExecutorResult;
+use crate::executor::Barrier;
 
 /// * For TopN, the storage key is: `[ order_by + remaining columns of pk ]`
 /// * For group TopN, the storage key is: `[ group_key + order_by + remaining columns of pk ]`
@@ -242,8 +242,8 @@ impl<S: StateStore> ManagedTopNState<S> {
         Ok(())
     }
 
-    pub async fn flush(&mut self, epoch: EpochPair) -> StreamExecutorResult<()> {
-        self.state_table.commit(epoch).await?;
+    pub async fn flush(&mut self, barrier: &Barrier) -> StreamExecutorResult<()> {
+        self.state_table.barrier(barrier).await?;
         Ok(())
     }
 }
@@ -252,6 +252,7 @@ impl<S: StateStore> ManagedTopNState<S> {
 mod tests {
     use risingwave_common::catalog::{Field, Schema};
     use risingwave_common::types::DataType;
+    use risingwave_common::util::epoch::EpochPair;
     use risingwave_common::util::sort_util::{ColumnOrder, OrderType};
 
     use super::*;

@@ -205,8 +205,15 @@ impl TraceSpan {
         Self::new_global_op(Operation::LocalStorageIsDirty, storage_type)
     }
 
-    pub fn new_seal_current_epoch_span(epoch: u64, storage_type: StorageType) -> MayTraceSpan {
-        Self::new_global_op(Operation::SealCurrentEpoch(epoch), storage_type)
+    pub fn new_seal_current_epoch_span(
+        epoch: u64,
+        is_checkpoint: bool,
+        storage_type: StorageType,
+    ) -> MayTraceSpan {
+        Self::new_global_op(
+            Operation::SealCurrentEpoch(epoch, is_checkpoint),
+            storage_type,
+        )
     }
 
     pub fn new_clear_shared_buffer_span() -> MayTraceSpan {

@@ -226,9 +226,9 @@ impl<S: StateStore> WatermarkFilterExecutor<S> {
                             // FIXME(yuhao): use upsert.
                             table.insert(row);
                         }
-                        table.commit(barrier.epoch).await?;
+                        table.barrier(&barrier).await?;
                     } else {
-                        table.commit_no_data_expected(barrier.epoch);
+                        table.empty_barrier_expected(&barrier);
                     }
 
                     yield Message::Barrier(barrier);

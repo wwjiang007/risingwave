@@ -274,7 +274,7 @@ impl<S: StateStore> SourceExecutor<S> {
 
     async fn take_snapshot_and_clear_cache(
         &mut self,
-        epoch: EpochPair,
+        barrier: &Barrier,
         target_state: Option<Vec<SplitImpl>>,
         should_trim_state: bool,
     ) -> StreamExecutorResult<()> {
@@ -314,7 +314,7 @@ impl<S: StateStore> SourceExecutor<S> {
             core.split_state_store.take_snapshot(cache).await?
         }
         // commit anyway, even if no message saved
-        core.split_state_store.state_store.commit(epoch).await?;
+        core.split_state_store.state_store.barrier(barrier).await?;
 
         core.state_cache.clear();
 
@@ -429,8 +429,6 @@ impl<S: StateStore> SourceExecutor<S> {
                             self_paused = false;
                         }
 
-                        let epoch = barrier.epoch;
-
                         let mut target_state = None;
                         let mut should_trim_state = false;
 
@@ -460,8 +458,12 @@ impl<S: StateStore> SourceExecutor<S> {
                             }
                         }
 
-                        self.take_snapshot_and_clear_cache(epoch, target_state, should_trim_state)
-                            .await?;
+                        self.take_snapshot_and_clear_cache(
+                            barrier,
+                            target_state,
+                            should_trim_state,
+                        )
+                        .await?;
 
                         self.metrics
                             .source_row_per_barrier

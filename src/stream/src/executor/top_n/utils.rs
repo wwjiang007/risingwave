@@ -30,7 +30,7 @@ use risingwave_common::util::sort_util::ColumnOrder;
 use super::CacheKey;
 use crate::executor::error::{StreamExecutorError, StreamExecutorResult};
 use crate::executor::{
-    expect_first_barrier, ActorContextRef, BoxedExecutor, BoxedMessageStream, Executor,
+    expect_first_barrier, ActorContextRef, Barrier, BoxedExecutor, BoxedMessageStream, Executor,
     ExecutorInfo, Message, PkIndicesRef, Watermark,
 };
 
@@ -40,7 +40,7 @@ pub trait TopNExecutorBase: Send + 'static {
     async fn apply_chunk(&mut self, chunk: StreamChunk) -> StreamExecutorResult<StreamChunk>;
 
     /// Flush the buffered chunk to the storage backend.
-    async fn flush_data(&mut self, epoch: EpochPair) -> StreamExecutorResult<()>;
+    async fn flush_data(&mut self, barrier: &Barrier) -> StreamExecutorResult<()>;
 
     fn info(&self) -> &ExecutorInfo;
 
@@ -134,7 +134,7 @@ where
                 }
                 Message::Chunk(chunk) => yield Message::Chunk(self.inner.apply_chunk(chunk).await?),
                 Message::Barrier(barrier) => {
-                    self.inner.flush_data(barrier.epoch).await?;
+                    self.inner.flush_data(&barrier).await?;
 
                     // Update the vnode bitmap, only used by Group Top-N.
                     if let Some(vnode_bitmap) = barrier.as_update_vnode_bitmap(self.ctx.id) {

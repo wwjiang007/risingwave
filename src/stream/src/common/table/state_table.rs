@@ -52,7 +52,7 @@ use tracing::{trace, Instrument};
 
 use super::watermark::{WatermarkBufferByEpoch, WatermarkBufferStrategy};
 use crate::cache::cache_may_stale;
-use crate::executor::{StreamExecutorError, StreamExecutorResult};
+use crate::executor::{Barrier, StreamExecutorError, StreamExecutorResult};
 
 /// This num is arbitrary and we may want to improve this choice in the future.
 const STATE_CLEANING_PERIOD_EPOCH: usize = 5;
@@ -765,8 +765,8 @@ where
         }
     }
 
-    pub async fn commit(&mut self, new_epoch: EpochPair) -> StreamExecutorResult<()> {
-        assert_eq!(self.epoch(), new_epoch.prev);
+    pub async fn barrier(&mut self, barrier: &Barrier) -> StreamExecutorResult<()> {
+        assert_eq!(self.epoch(), barrier.epoch.prev);
         trace!(
             table_id = %self.table_id,
             epoch = ?self.epoch(),
@@ -775,7 +775,7 @@ where
         // Tick the watermark buffer here because state table is expected to be committed once
         // per epoch.
         self.watermark_buffer_strategy.tick();
-        self.seal_current_epoch(new_epoch.curr)
+        self.seal_current_epoch(barrier.epoch.curr, barrier.checkpoint)
             .instrument(tracing::info_span!("state_table_commit"))
             .await
     }
@@ -783,17 +783,22 @@ where
     // TODO(st1page): maybe we should extract a pub struct to do it
     /// just specially used by those state table read-only and after the call the data
     /// in the epoch will be visible
-    pub fn commit_no_data_expected(&mut self, new_epoch: EpochPair) {
-        assert_eq!(self.epoch(), new_epoch.prev);
+    pub fn empty_barrier_expected(&mut self, barrier: &Barrier) {
+        assert_eq!(self.epoch(), barrier.epoch.prev);
         assert!(!self.is_dirty());
         // Tick the watermark buffer here because state table is expected to be committed once
         // per epoch.
         self.watermark_buffer_strategy.tick();
-        self.local_store.seal_current_epoch(new_epoch.curr);
+        self.local_store
+            .seal_current_epoch(barrier.epoch.curr, barrier.checkpoint);
     }
 
     /// Write to state store.
-    async fn seal_current_epoch(&mut self, next_epoch: u64) -> StreamExecutorResult<()> {
+    async fn seal_current_epoch(
+        &mut self,
+        next_epoch: u64,
+        is_checkpoint: bool,
+    ) -> StreamExecutorResult<()> {
         let watermark = self.state_clean_watermark.take();
         watermark.as_ref().inspect(|watermark| {
             trace!(table_id = %self.table_id, watermark = ?watermark, "state cleaning");
@@ -850,7 +855,8 @@ where
             }
         }
         self.local_store.flush(delete_ranges).await?;
-        self.local_store.seal_current_epoch(next_epoch);
+        self.local_store
+            .seal_current_epoch(next_epoch, is_checkpoint);
         Ok(())
     }
 }

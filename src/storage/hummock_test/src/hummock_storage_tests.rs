@@ -171,7 +171,7 @@ async fn test_storage_basic() {
     assert_eq!(value, None);
 
     let epoch2 = epoch1 + 1;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, false);
     hummock_storage
         .ingest_batch(
             batch2,
@@ -208,7 +208,7 @@ async fn test_storage_basic() {
 
     // Write the third batch.
     let epoch3 = epoch2 + 1;
-    hummock_storage.seal_current_epoch(epoch3);
+    hummock_storage.seal_current_epoch(epoch3, false);
     hummock_storage
         .ingest_batch(
             batch3,
@@ -576,7 +576,7 @@ async fn test_state_store_sync() {
         .unwrap();
 
     let epoch2 = epoch1 + 1;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, true);
 
     // ingest more 8B then will trigger a sync behind the scene
     let mut batch3 = vec![(
@@ -882,7 +882,7 @@ async fn test_delete_get() {
         .await
         .unwrap();
     let epoch2 = initial_epoch + 2;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, false);
     let batch2 = vec![(Bytes::from("bb"), StorageValue::new_delete())];
     hummock_storage
         .ingest_batch(
@@ -895,6 +895,7 @@ async fn test_delete_get() {
         )
         .await
         .unwrap();
+    hummock_storage.seal_current_epoch(u64::MAX, true);
     let res = test_env.storage.seal_and_sync_epoch(epoch2).await.unwrap();
     test_env
         .meta_client
@@ -958,7 +959,7 @@ async fn test_multiple_epoch_sync() {
         .unwrap();
 
     let epoch2 = initial_epoch + 2;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, false);
     let batch2 = vec![(Bytes::from("bb"), StorageValue::new_delete())];
     hummock_storage
         .ingest_batch(
@@ -973,7 +974,7 @@ async fn test_multiple_epoch_sync() {
         .unwrap();
 
     let epoch3 = initial_epoch + 3;
-    hummock_storage.seal_current_epoch(epoch3);
+    hummock_storage.seal_current_epoch(epoch3, true);
     let batch3 = vec![
         (Bytes::from("aa"), StorageValue::new_put("444")),
         (Bytes::from("bb"), StorageValue::new_put("555")),
@@ -989,6 +990,7 @@ async fn test_multiple_epoch_sync() {
         )
         .await
         .unwrap();
+    hummock_storage.seal_current_epoch(u64::MAX, true);
     let test_get = || {
         let hummock_storage_clone = &test_env.storage;
         async move {
@@ -1117,7 +1119,7 @@ async fn test_iter_with_min_epoch() {
         .unwrap();
 
     let epoch2 = (32 * 1000) << 16;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, true);
     // epoch 2 write
     let batch_epoch2: Vec<(Bytes, StorageValue)> = (20..30)
         .map(|index| {
@@ -1139,6 +1141,8 @@ async fn test_iter_with_min_epoch() {
         )
         .await
         .unwrap();
+
+    hummock_storage.seal_current_epoch(u64::MAX, true);
 
     {
         // test before sync
@@ -1372,7 +1376,7 @@ async fn test_hummock_version_reader() {
             .await
             .unwrap();
 
-        hummock_storage.seal_current_epoch(epoch2);
+        hummock_storage.seal_current_epoch(epoch2, true);
         hummock_storage
             .ingest_batch(
                 batch_epoch2,
@@ -1385,7 +1389,7 @@ async fn test_hummock_version_reader() {
             .await
             .unwrap();
 
-        hummock_storage.seal_current_epoch(epoch3);
+        hummock_storage.seal_current_epoch(epoch3, true);
         hummock_storage
             .ingest_batch(
                 batch_epoch3,
@@ -1397,6 +1401,7 @@ async fn test_hummock_version_reader() {
             )
             .await
             .unwrap();
+        hummock_storage.seal_current_epoch(u64::MAX, true);
 
         {
             // test before sync
@@ -1817,7 +1822,7 @@ async fn test_get_with_min_epoch() {
         .unwrap();
 
     let epoch2 = (32 * 1000) << 16;
-    hummock_storage.seal_current_epoch(epoch2);
+    hummock_storage.seal_current_epoch(epoch2, true);
     // epoch 2 write
     let batch_epoch2: Vec<(Bytes, StorageValue)> = (20..30)
         .map(|index| {
@@ -1839,6 +1844,7 @@ async fn test_get_with_min_epoch() {
         )
         .await
         .unwrap();
+    hummock_storage.seal_current_epoch(u64::MAX, true);
 
     {
         // test before sync

@@ -172,7 +172,7 @@ pub enum Operation {
     ClearSharedBuffer,
 
     /// Seal current epoch
-    SealCurrentEpoch(u64),
+    SealCurrentEpoch(u64, bool),
 
     /// validate read epoch
     ValidateReadEpoch(TracedHummockReadEpoch),

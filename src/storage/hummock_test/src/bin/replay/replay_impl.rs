@@ -203,8 +203,8 @@ impl LocalReplay for LocalReplayImpl {
         self.0.init(epoch);
     }
 
-    fn seal_current_epoch(&mut self, next_epoch: u64) {
-        self.0.seal_current_epoch(next_epoch);
+    fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
+        self.0.seal_current_epoch(next_epoch, is_checkpoint);
     }
 
     fn epoch(&self) -> u64 {

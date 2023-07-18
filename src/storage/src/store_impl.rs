@@ -452,10 +452,10 @@ pub mod verify {
             }
         }
 
-        fn seal_current_epoch(&mut self, next_epoch: u64) {
-            self.actual.seal_current_epoch(next_epoch);
+        fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
+            self.actual.seal_current_epoch(next_epoch, is_checkpoint);
             if let Some(expected) = &mut self.expected {
-                expected.seal_current_epoch(next_epoch);
+                expected.seal_current_epoch(next_epoch, is_checkpoint);
             }
         }
 
@@ -778,7 +778,7 @@ pub mod boxed_state_store {
 
         fn init(&mut self, epoch: u64);
 
-        fn seal_current_epoch(&mut self, next_epoch: u64);
+        fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool);
     }
 
     #[async_trait::async_trait]
@@ -835,8 +835,8 @@ pub mod boxed_state_store {
             self.init(epoch)
         }
 
-        fn seal_current_epoch(&mut self, next_epoch: u64) {
-            self.seal_current_epoch(next_epoch)
+        fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
+            self.seal_current_epoch(next_epoch, is_checkpoint)
         }
     }
 
@@ -901,8 +901,9 @@ pub mod boxed_state_store {
             self.deref_mut().init(epoch)
         }
 
-        fn seal_current_epoch(&mut self, next_epoch: u64) {
-            self.deref_mut().seal_current_epoch(next_epoch)
+        fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
+            self.deref_mut()
+                .seal_current_epoch(next_epoch, is_checkpoint)
         }
     }
 

@@ -200,9 +200,10 @@ impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
         self.inner.init(epoch)
     }
 
-    fn seal_current_epoch(&mut self, next_epoch: u64) {
-        let _span = TraceSpan::new_seal_current_epoch_span(next_epoch, self.storage_type);
-        self.inner.seal_current_epoch(next_epoch)
+    fn seal_current_epoch(&mut self, next_epoch: u64, is_checkpoint: bool) {
+        let _span =
+            TraceSpan::new_seal_current_epoch_span(next_epoch, is_checkpoint, self.storage_type);
+        self.inner.seal_current_epoch(next_epoch, is_checkpoint)
     }
 }
 

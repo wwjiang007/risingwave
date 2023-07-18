@@ -24,7 +24,6 @@ use risingwave_common::catalog::Schema;
 use risingwave_common::row;
 use risingwave_common::row::OwnedRow;
 use risingwave_common::types::Datum;
-use risingwave_common::util::epoch::EpochPair;
 use risingwave_hummock_sdk::HummockReadEpoch;
 use risingwave_storage::store::PrefetchOptions;
 use risingwave_storage::table::batch_table::storage_table::StorageTable;
@@ -39,8 +38,8 @@ use crate::executor::backfill::utils::{
 };
 use crate::executor::monitor::StreamingMetrics;
 use crate::executor::{
-    expect_first_barrier, BoxedExecutor, BoxedMessageStream, Executor, ExecutorInfo, Message,
-    PkIndices, PkIndicesRef, StreamExecutorError, StreamExecutorResult,
+    expect_first_barrier, Barrier, BoxedExecutor, BoxedMessageStream, Executor, ExecutorInfo,
+    Message, PkIndices, PkIndicesRef, StreamExecutorError, StreamExecutorResult,
 };
 use crate::task::{ActorId, CreateMviewProgress};
 
@@ -313,7 +312,7 @@ where
 
                                     // Persist state on barrier
                                     Self::persist_state(
-                                        barrier.epoch,
+                                        &barrier,
                                         &mut self.state_table,
                                         false,
                                         &current_pos,
@@ -405,7 +404,7 @@ where
                     debug_assert_ne!(current_pos, None);
 
                     Self::persist_state(
-                        barrier.epoch,
+                        barrier,
                         &mut self.state_table,
                         true,
                         &current_pos,
@@ -428,7 +427,7 @@ where
         for msg in upstream {
             if let Some(msg) = mapping_message(msg?, &self.output_indices) {
                 if let Some(state_table) = self.state_table.as_mut() && let Message::Barrier(barrier) = &msg {
-                        state_table.commit_no_data_expected(barrier.epoch);
+                        state_table.empty_barrier_expected(barrier);
                     }
                 yield msg;
             }
@@ -474,7 +473,7 @@ where
     }
 
     async fn persist_state(
-        epoch: EpochPair,
+        barrier: &Barrier,
         table: &mut Option<StateTable<S>>,
         is_finished: bool,
         current_pos: &Option<OwnedRow>,
@@ -486,7 +485,7 @@ where
             return Ok(())
         };
         utils::persist_state(
-            epoch,
+            barrier,
             table,
             is_finished,
             current_pos,

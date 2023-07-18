@@ -267,6 +267,7 @@ pub(crate) mod tests {
     use serde_json::Value;
 
     use super::*;
+    use crate::executor::Barrier;
 
     #[tokio::test]
     async fn test_from_table_catalog() {
@@ -287,7 +288,13 @@ pub(crate) mod tests {
 
         state_table.init_epoch(init_epoch);
         state_table.insert(OwnedRow::new(vec![a.clone(), b.clone()]));
-        state_table.commit(next_epoch).await.unwrap();
+        state_table
+            .barrier(&Barrier::with_prev_epoch_for_test(
+                next_epoch.curr,
+                next_epoch.prev,
+            ))
+            .await
+            .unwrap();
 
         let a: Arc<str> = String::from("a").into();
         let a: Datum = Some(ScalarImpl::Utf8(a.as_ref().into()));
@@ -314,9 +321,21 @@ pub(crate) mod tests {
         state_table_handler
             .take_snapshot(vec![split_impl.clone()])
             .await?;
-        state_table_handler.state_store.commit(epoch_2).await?;
+        state_table_handler
+            .state_store
+            .barrier(&Barrier::with_prev_epoch_for_test(
+                epoch_2.curr,
+                epoch_2.prev,
+            ))
+            .await?;
 
-        state_table_handler.state_store.commit(epoch_3).await?;
+        state_table_handler
+            .state_store
+            .barrier(&Barrier::with_prev_epoch_for_test(
+                epoch_3.curr,
+                epoch_3.prev,
+            ))
+            .await?;
 
         match state_table_handler
             .try_recover_from_state_store(&split_impl)
