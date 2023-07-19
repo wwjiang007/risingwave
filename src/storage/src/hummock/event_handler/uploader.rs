@@ -660,6 +660,15 @@ impl HummockUploader {
             .push_front(imm);
     }
 
+    pub(crate) fn local_seal_epoch(
+        &mut self,
+        _instance_id: LocalInstanceId,
+        _epoch: HummockEpoch,
+        _is_checkpoint: bool,
+    ) {
+        // TODO: implement it
+    }
+
     pub(crate) fn seal_epoch(&mut self, epoch: HummockEpoch) {
         info_in_release!("epoch {} is sealed", epoch);
         assert!(

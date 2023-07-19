@@ -62,6 +62,12 @@ pub enum HummockEvent {
 
     ImmToUploader(ImmutableMemtable),
 
+    LocalSealEpoch {
+        instance_id: LocalInstanceId,
+        epoch: HummockEpoch,
+        is_checkpoint: bool,
+    },
+
     SealEpoch {
         epoch: HummockEpoch,
         is_checkpoint: bool,
@@ -130,7 +136,14 @@ impl HummockEvent {
                 "DestroyReadVersion table_id {:?} instance_id {:?}",
                 table_id, instance_id
             ),
-
+            HummockEvent::LocalSealEpoch {
+                instance_id,
+                epoch,
+                is_checkpoint,
+            } => format!(
+                "LocalSealEpoch instance_id {:?}, epoch {}, is_checkpoint: {:?}",
+                instance_id, epoch, is_checkpoint
+            ),
             #[cfg(any(test, feature = "test"))]
             HummockEvent::FlushEvent(_) => "FlushEvent".to_string(),
         }

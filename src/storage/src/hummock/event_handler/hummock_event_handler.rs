@@ -540,7 +540,14 @@ impl HummockEventHandler {
                             self.uploader.add_imm(imm);
                             self.uploader.may_flush();
                         }
-
+                        HummockEvent::LocalSealEpoch {
+                            instance_id,
+                            epoch,
+                            is_checkpoint,
+                        } => {
+                            self.uploader
+                                .local_seal_epoch(instance_id, epoch, is_checkpoint);
+                        }
                         HummockEvent::SealEpoch {
                             epoch,
                             is_checkpoint,
