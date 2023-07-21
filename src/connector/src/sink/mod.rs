@@ -18,9 +18,11 @@ pub mod kinesis;
 pub mod redis;
 pub mod remote;
 pub mod utils;
+pub mod clickhouse;
 
 use std::collections::HashMap;
 
+use ::clickhouse::error::Error as ClickHouseError;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -401,6 +403,8 @@ pub enum SinkError {
     Config(#[from] anyhow::Error),
     #[error("coordinator error: {0}")]
     Coordinator(anyhow::Error),
+    #[error("ClickHouse error: {0}")]
+    ClickHouse(String),
 }
 
 impl From<RpcError> for SinkError {
@@ -412,5 +416,11 @@ impl From<RpcError> for SinkError {
 impl From<SinkError> for RwError {
     fn from(e: SinkError) -> Self {
         ErrorCode::SinkError(Box::new(e)).into()
+    }
+}
+
+impl From<ClickHouseError> for SinkError {
+    fn from(value: ClickHouseError) -> Self {
+        SinkError::ClickHouse(format!("{}", value))
     }
 }
