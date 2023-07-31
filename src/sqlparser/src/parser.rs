@@ -850,7 +850,7 @@ impl Parser {
             let rows = if self.parse_keyword(Keyword::UNBOUNDED) {
                 None
             } else {
-                Some(self.parse_literal_uint()?)
+                Some(Box::new(self.parse_expr()?))
             };
             if self.parse_keyword(Keyword::PRECEDING) {
                 Ok(WindowFrameBound::Preceding(rows))
@@ -3658,6 +3658,7 @@ impl Parser {
         let distinct = self.parse_all_or_distinct_on()?;
 
         let projection = self.parse_comma_separated(Parser::parse_select_item)?;
+        println!("[rc] projection: {:?}", projection);
 
         // Note that for keywords to be properly handled here, they need to be
         // added to `RESERVED_FOR_COLUMN_ALIAS` / `RESERVED_FOR_TABLE_ALIAS`,
