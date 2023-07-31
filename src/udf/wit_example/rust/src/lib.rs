@@ -16,6 +16,8 @@ use std::sync::Arc;
 
 use arrow_array::Array;
 
+use crate::risingwave::udf::types::{DataType, Field};
+
 wit_bindgen::generate!({
     // optional, since there's only one world. We make it explicit here.
     world: "udf",
@@ -45,7 +47,10 @@ impl Udf for MyUdf {
                     .column(0)
                     .as_any()
                     .downcast_ref::<arrow_array::Int64Array>()
-                    .expect(format!("expected i64 array, got {:?}", batch.column(0).data_type()).as_str())
+                    .expect(
+                        format!("expected i64 array, got {:?}", batch.column(0).data_type())
+                            .as_str(),
+                    )
                     .value(i);
                 ret.append_value(val > 0);
             }
@@ -70,10 +75,16 @@ impl Udf for MyUdf {
     }
 
     fn input_schema() -> Schema {
-        todo!()
+        vec![Field {
+            name: "input".to_string(),
+            data_type: DataType::DtI64,
+        }]
     }
 
     fn output_schema() -> Schema {
-        todo!()
+        vec![Field {
+            name: "result".to_string(),
+            data_type: DataType::DtBool,
+        }]
     }
 }

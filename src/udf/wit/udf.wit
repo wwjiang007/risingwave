@@ -23,7 +23,9 @@ interface types {
     dt-string,
   }
 
-  record schema {
+  type schema = list<field>
+
+  record field {
     name: string,
     data-type: data-type,
   }
