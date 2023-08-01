@@ -23,7 +23,7 @@ use risingwave_object_store::object::{parse_remote_object_store, ObjectStoreImpl
 use tokio::sync::Mutex;
 use tracing::debug;
 use wasmtime::component::{Component, Linker};
-use wasmtime::{Config, Store};
+use wasmtime::{Config, Store, WasmBacktraceDetails};
 
 pub mod component {
     mod bindgen {
@@ -42,6 +42,20 @@ pub mod component {
 struct WasmState {
     wasi_ctx: wasmtime_wasi::preview2::WasiCtx,
     table: wasmtime_wasi::preview2::Table,
+}
+
+impl WasmState {
+    pub fn try_new() -> WasmUdfResult<Self> {
+        let mut table = wasmtime_wasi::preview2::Table::new();
+
+        let wasi_ctx = wasmtime_wasi::preview2::WasiCtxBuilder::new()
+            // Note: panic message is printed, and only available in WASI.
+            // TODO: redirect to tracing to make it clear it's from WASM.
+            .inherit_stdout()
+            .inherit_stderr()
+            .build(&mut table)?;
+        Ok(Self { wasi_ctx, table })
+    }
 }
 
 impl wasmtime_wasi::preview2::WasiView for WasmState {
@@ -135,9 +149,12 @@ impl WasmEngine {
     pub fn new() -> Self {
         // Is this expensive?
         let mut config = Config::new();
-        config.wasm_component_model(true);
-        // required for wasi
-        config.async_support(true);
+        config
+            .wasm_component_model(true)
+            // required for wasi
+            .async_support(true)
+            .wasm_backtrace(true)
+            .wasm_backtrace_details(WasmBacktraceDetails::Enable);
 
         Self {
             engine: wasmtime::Engine::new(&config).expect("failed to create wasm engine"),
@@ -188,11 +205,8 @@ impl WasmEngine {
         // "main instance" that an embedding is interested in executing.
 
         // So creating a Store is cheap?
-        let mut table = wasmtime_wasi::preview2::Table::new();
-        let wasi_ctx = wasmtime_wasi::preview2::WasiCtxBuilder::new()
-            .inherit_stdio() // this is needed for println to work
-            .build(&mut table)?;
-        let mut store = Store::new(&self.engine, WasmState { table, wasi_ctx });
+
+        let mut store = Store::new(&self.engine, WasmState::try_new()?);
         wasmtime_wasi::preview2::wasi::command::add_to_linker(&mut linker)?;
         let (_bindings, _instance) =
             component::Udf::instantiate_async(&mut store, &component, &linker).await?;
@@ -225,11 +239,7 @@ impl WasmEngine {
         };
 
         let mut linker = Linker::new(&self.engine);
-        let mut table = wasmtime_wasi::preview2::Table::new();
-        let wasi_ctx = wasmtime_wasi::preview2::WasiCtxBuilder::new()
-            .inherit_stdio() // this is needed for println to work
-            .build(&mut table)?;
-        let mut store = Store::new(&self.engine, WasmState { table, wasi_ctx });
+        let mut store = Store::new(&self.engine, WasmState::try_new()?);
         wasmtime_wasi::preview2::wasi::command::add_to_linker(&mut linker)?;
         let (bindings, instance) =
             component::Udf::instantiate_async(&mut store, &component, &linker).await?;
@@ -246,7 +256,7 @@ pub type WasmUdfResult<T> = std::result::Result<T, WasmUdfError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum WasmUdfError {
-    #[error("wasm error: {0}")]
+    #[error("wasm error: {0:#}")]
     Wasmtime(#[from] wasmtime::Error),
     #[error("arrow error: {0}")]
     Arrow(#[from] arrow_schema::ArrowError),

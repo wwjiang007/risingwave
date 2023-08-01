@@ -16,13 +16,12 @@ echo "size of encoded wasm: ${#encoded} bytes"
 # debug:   23557258
 # release: 12457072
 
-psql -h localhost -p 4566 -d dev -U root -c "DROP FUNCTION IF EXISTS is_positive;"
-sql="CREATE FUNCTION is_positive (x bigint) RETURNS BOOL LANGUAGE wasm_v1 USING BASE64 '$encoded';"
+psql -h localhost -p 4566 -d dev -U root -c "DROP FUNCTION IF EXISTS count_char;"
+sql="CREATE FUNCTION count_char (s varchar, c varchar) RETURNS BIGINT LANGUAGE wasm_v1 USING BASE64 '$encoded';"
 echo "$sql" > create.sql
 psql -h localhost -p 4566 -d dev -U root -f ./create.sql
 
 # test
-# FIXME: can we let int work? (auto type conversion) https://github.com/risingwavelabs/risingwave/issues/9998
-psql -h localhost -p 4566 -d dev -U root -c "SELECT is_positive(1::bigint);"
-psql -h localhost -p 4566 -d dev -U root -c "SELECT is_positive(0::bigint);"
-psql -h localhost -p 4566 -d dev -U root -c "SELECT is_positive(-1::bigint);"
+psql -h localhost -p 4566 -d dev -U root -c "SELECT count_char('aabca', 'a');"
+psql -h localhost -p 4566 -d dev -U root -c "SELECT count_char('aabca', 'b');"
+psql -h localhost -p 4566 -d dev -U root -c "SELECT count_char('aabca', 'd');"

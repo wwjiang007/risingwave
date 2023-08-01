@@ -28,31 +28,59 @@ wit_bindgen::generate!({
 // Define a custom type and implement the generated `Udf` trait for it which
 // represents implementing all the necesssary exported interfaces for this
 // component.
-struct MyUdf;
+/// User defined function tou count number of specified characters.
+/// Ref <https://github.com/nexmark/nexmark/blob/master/nexmark-flink/src/main/java/com/github/nexmark/flink/udf/CountChar.java>
+struct CountChar;
 
-export_udf!(MyUdf);
+export_udf!(CountChar);
 
-// input I64Array, output BoolArray (true if > 0)
-impl Udf for MyUdf {
+fn count_char(s: &str, char: &str) -> i64 {
+    let mut count = 0;
+    let char = char.bytes().next().unwrap();
+
+    for c in s.bytes() {
+        if c == char {
+            count += 1;
+        }
+    }
+    count
+}
+
+impl Udf for CountChar {
     fn eval(batch: RecordBatch) -> Result<RecordBatch, EvalErrno> {
         // Read data from IPC buffer
         let batch = arrow_ipc::reader::StreamReader::try_new(batch.as_slice(), None).unwrap();
 
         // Do UDF computation (for each batch, for each row, do scalar -> scalar)
-        let mut ret = arrow_array::builder::BooleanBuilder::new();
+        let mut ret = arrow_array::builder::Int64Builder::new();
         for batch in batch {
             let batch = batch.unwrap();
             for i in 0..batch.num_rows() {
-                let val = batch
+                let s = batch
                     .column(0)
                     .as_any()
-                    .downcast_ref::<arrow_array::Int64Array>()
+                    .downcast_ref::<arrow_array::StringArray>()
                     .expect(
-                        format!("expected i64 array, got {:?}", batch.column(0).data_type())
-                            .as_str(),
+                        format!(
+                            "expected StringArray, got {:?}",
+                            batch.column(0).data_type()
+                        )
+                        .as_str(),
                     )
                     .value(i);
-                ret.append_value(val > 0);
+                let c = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<arrow_array::StringArray>()
+                    .expect(
+                        format!(
+                            "expected StringArray, got {:?}",
+                            batch.column(1).data_type()
+                        )
+                        .as_str(),
+                    )
+                    .value(i);
+                ret.append_value(count_char(s, c));
             }
         }
 
@@ -62,7 +90,7 @@ impl Udf for MyUdf {
             let array = ret.finish();
             let schema = arrow_schema::Schema::new(vec![arrow_schema::Field::new(
                 "result",
-                arrow_schema::DataType::Boolean,
+                arrow_schema::DataType::Int64,
                 false,
             )]);
             let mut writer = arrow_ipc::writer::StreamWriter::try_new(&mut buf, &schema).unwrap();
@@ -77,14 +105,14 @@ impl Udf for MyUdf {
     fn input_schema() -> Schema {
         vec![Field {
             name: "input".to_string(),
-            data_type: DataType::DtI64,
+            data_type: DataType::DtString,
         }]
     }
 
     fn output_schema() -> Schema {
         vec![Field {
             name: "result".to_string(),
-            data_type: DataType::DtBool,
+            data_type: DataType::DtI64,
         }]
     }
 }

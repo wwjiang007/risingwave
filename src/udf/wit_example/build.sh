@@ -40,7 +40,7 @@ function build_rust() {
 
     cd "$path/rust"
 
-    rustup target add wasm32-unknown-unknown
+    rustup target add wasm32-wasi
 
     profile=release
     if [ "$profile" == "dev" ]; then
@@ -49,8 +49,8 @@ function build_rust() {
         target_dir=$profile
     fi
 
-    cargo build --target=wasm32-unknown-unknown --profile "${profile}"
-    mv ./target/wasm32-unknown-unknown/"${target_dir}"/my_udf.wasm ../my_udf.rust.wasm
+    cargo build --target=wasm32-wasi --profile "${profile}"
+    mv ./target/wasm32-wasi/"${target_dir}"/my_udf.wasm ../my_udf.rust.wasm
 
     cd ..
 }
