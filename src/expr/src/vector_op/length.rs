@@ -20,6 +20,35 @@ pub fn char_length(s: &str) -> i32 {
     s.chars().count() as i32
 }
 
+/// https://github.com/nexmark/nexmark/blob/master/nexmark-flink/src/main/java/com/github/nexmark/flink/udf/CountChar.java
+/// ```java
+/// public long eval(@DataTypeHint("STRING") StringData s, @DataTypeHint("STRING") StringData character) {
+///     long count = 0;
+///     if (null != s) {
+///         byte[] bytes = s.toBytes();
+///         byte chr = character.toBytes()[0];
+///         for (byte aByte : bytes) {
+///             if (aByte == chr) {
+///                 count++;
+///             }
+///         }
+///     }
+///     return count;
+/// }
+/// ```
+#[function("count_char(varchar, varchar) -> int64")]
+pub fn count_char(s: &str, char: &str) -> i64 {
+    let mut count = 0;
+    let char = char.bytes().next().unwrap();
+
+    for c in s.bytes() {
+        if c == char {
+            count += 1;
+        }
+    }
+    count
+}
+
 #[function("octet_length(varchar) -> int32")]
 #[function("length(bytea) -> int32")]
 #[function("octet_length(bytea) -> int32")]

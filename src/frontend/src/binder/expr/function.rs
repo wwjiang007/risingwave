@@ -684,6 +684,8 @@ impl Binder {
                 ("sha512", raw_call(ExprType::Sha512)),
                 ("left", raw_call(ExprType::Left)),
                 ("right", raw_call(ExprType::Right)),
+                ("count_char", raw_call(ExprType::CountChar)),
+
                 // array
                 ("array_cat", raw_call(ExprType::ArrayCat)),
                 ("array_append", raw_call(ExprType::ArrayAppend)),
