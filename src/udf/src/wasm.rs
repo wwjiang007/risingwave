@@ -255,7 +255,7 @@ pub enum WasmUdfError {
     #[error("{0}")]
     Encoding(String),
     #[error("object store error: {0}")]
-    ObjectStore(#[from] risingwave_object_store::object::ObjectError),
+    ObjectStore(#[from] Box<risingwave_object_store::object::ObjectError>),
     #[error("object store error: {0}")]
     ObjectStore1(String),
 }
@@ -286,4 +286,10 @@ async fn get_wasm_storage(wasm_storage_url: &str) -> WasmUdfResult<ObjectStoreIm
     )
     .await;
     Ok(object_store)
+}
+
+impl From<risingwave_object_store::object::ObjectError> for WasmUdfError {
+    fn from(e: risingwave_object_store::object::ObjectError) -> Self {
+        WasmUdfError::ObjectStore(Box::new(e))
+    }
 }

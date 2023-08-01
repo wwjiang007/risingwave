@@ -15,6 +15,9 @@
 #![feature(lazy_cell)]
 #![feature(lint_reasons)]
 
+mod error;
 mod external;
-pub use external::{ArrowFlightUdfClient, Error};
+
+pub use error::{Error, Result};
+pub use external::ArrowFlightUdfClient;
 pub mod wasm;
