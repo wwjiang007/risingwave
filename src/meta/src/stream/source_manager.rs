@@ -55,7 +55,7 @@ pub struct SourceManager<S: MetaStore> {
 }
 
 const MAX_FAIL_CNT: u32 = 10;
-const DEFAULT_TICK_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_TICK_TIMEOUT: Duration = Duration::from_secs(600);
 
 struct SharedSplitMap {
     splits: Option<BTreeMap<SplitId, SplitImpl>>,
