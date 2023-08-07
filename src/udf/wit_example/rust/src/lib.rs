@@ -52,7 +52,7 @@ impl Udf for CountChar {
         let batch = arrow_ipc::reader::StreamReader::try_new(batch.as_slice(), None).unwrap();
 
         // Do UDF computation (for each batch, for each row, do scalar -> scalar)
-        let mut ret = arrow_array::builder::Int64Builder::new();
+        let mut ret: arrow_array::builder::PrimitiveBuilder<arrow_array::types::Int64Type> = arrow_array::builder::Int64Builder::new();
         for batch in batch {
             let batch = batch.unwrap();
             for i in 0..batch.num_rows() {

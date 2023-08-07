@@ -48,6 +48,7 @@ members = [
   "src/utils/workspace-config",
   "src/workspace-hack",
 ]
+exclude = ["flight-udf"]
 
 [workspace.package]
 version = "1.0.0-alpha"

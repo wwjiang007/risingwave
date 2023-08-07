@@ -1,0 +1,32 @@
+[package]
+name = "flight-udf"
+version = "0.1.0"
+edition = "2021"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+tokio = { version = "1", features = [
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "fs",
+    "process",
+] }
+tokio-postgres = { git = "https://github.com/sfackler/rust-postgres", rev = "97db777" }
+tokio-util = { version = "0.7", features = ["codec"] }
+anyhow = "1.0"
+hyper = { version = "0.14", features = ["server", "http2", "tcp", "http1"] }
+
+arrow-array = "40"
+arrow-flight = "40"
+arrow-schema = "40"
+arrow-select = "40"
+arrow-ipc = "40"
+tonic = "0.9"
+
+async-trait = "0.1"
+futures = "0.3"
