@@ -9,6 +9,18 @@ sys.path.append("src/udf/python")  # noqa
 from risingwave.udf import udf, udtf, UdfServer
 
 
+@udf(input_types=["VARCHAR", "VARCHAR"], result_type="BIGINT")
+def count_char(s:str, char:str) -> int:
+    if not s or not char:
+        return None
+    count = 0
+    s_bytes = s.encode()
+    char_byte = char.encode()[0]
+    for c in s_bytes:
+        if c == char_byte:
+            count += 1
+    return count
+
 @udf(input_types=[], result_type="INT")
 def int_42() -> int:
     return 42
@@ -177,6 +189,8 @@ def return_all_arrays(
 
 if __name__ == "__main__":
     server = UdfServer(location="0.0.0.0:8815")
+    server.add_function(count_char)
+    
     server.add_function(int_42)
     server.add_function(gcd)
     server.add_function(gcd3)

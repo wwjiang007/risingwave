@@ -228,9 +228,11 @@ impl WasmEngine {
         wasm_storage_url: &str,
         identifier: &str,
     ) -> WasmUdfResult<InstantiatedComponent> {
+        tracing::warn!("load component: {}", identifier);
         let object_store = get_wasm_storage(wasm_storage_url).await?;
+        tracing::warn!("object_store created");
         let serialized_component = object_store.read(&compiled_path(identifier), None).await?;
-
+        tracing::warn!("serialized_component read");
         // This is fast.
         let component = unsafe {
             // safety: it's serialized by ourself

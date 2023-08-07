@@ -170,6 +170,7 @@ pub struct MetaNodeOpts {
     #[override_opts(path = system.backup_storage_url)]
     backup_storage_url: Option<String>,
 
+    #[clap(long, env = "RW_WASM_STORAGE_URL")]
     #[override_opts(path = system.wasm_storage_url)]
     wasm_storage_url: Option<String>,
 

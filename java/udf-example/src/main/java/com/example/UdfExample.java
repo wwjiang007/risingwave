@@ -48,6 +48,8 @@ public class UdfExample {
             server.addFunction("return_all_arrays", new ReturnAllArrays());
             server.addFunction("series", new Series());
             server.addFunction("split", new Split());
+            server.addFunction("count_char", new CountChar());
+
 
             server.start();
             server.awaitTermination();
@@ -119,6 +121,28 @@ public class UdfExample {
             return array[index - 1];
         }
     }
+
+
+    public static class CountChar implements ScalarFunction {
+        public Long eval(String s, String character) {
+            try{long count = 0;
+            if (null != s && null != character) {
+                byte[] bytes = s.getBytes();
+                byte chr = character.getBytes()[0];
+                for (byte aByte : bytes) {
+                    if (aByte == chr) {
+                        count++;
+                    }
+                }
+            }
+            return count;}
+            catch (Exception e){
+                System.out.println("What happend?" + e);
+                return null;
+            }
+        }
+    }
+
 
     public static class JsonbAccess implements ScalarFunction {
         static Gson gson = new Gson();

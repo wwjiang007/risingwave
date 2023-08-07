@@ -585,7 +585,7 @@ impl S3ObjectStore {
         let sdk_config_loader = aws_config::from_env()
             .retry_config(RetryConfig::standard().with_max_attempts(4))
             .http_connector(hyper_adapter);
-
+        
         // Retry 3 times if we get server-side errors or throttling errors
         let client = match std::env::var("RW_S3_ENDPOINT") {
             Ok(endpoint) => {
@@ -611,6 +611,7 @@ impl S3ObjectStore {
                 // s3
 
                 let sdk_config = sdk_config_loader.load().await;
+                tracing::warn!("sdk_config: {:?}", sdk_config);
                 Client::new(&sdk_config)
             }
         };

@@ -4,12 +4,12 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <parent>
+  <!-- <parent>
     <artifactId>java-parent</artifactId>
     <groupId>com.risingwave.java</groupId>
     <version>1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
-  </parent>
+  </parent> -->
 
   <groupId>com.example</groupId>
   <artifactId>udf-example</artifactId>
@@ -24,13 +24,14 @@
     <maven.compiler.target>11</maven.compiler.target>
   </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>com.risingwave.java</groupId>
-      <artifactId>risingwave-udf</artifactId>
-      <version>0.0.1</version>
-    </dependency>
-  </dependencies>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.risingwave.java</groupId>
+            <artifactId>risingwave-udf</artifactId>
+            <version>0.0.1</version>
+        </dependency>
+    </dependencies>
 
   <build>
     <plugins>

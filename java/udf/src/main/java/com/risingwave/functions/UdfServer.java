@@ -131,6 +131,9 @@ class UdfProducer extends NoOpFlightProducer {
             logger.debug("call function: " + functionName);
 
             var udf = this.functions.get(functionName);
+            if (udf == null) {
+                throw new IllegalArgumentException("Unknown function: " + functionName);
+            }
             try (var root = VectorSchemaRoot.create(udf.getOutputSchema(), this.allocator)) {
                 var loader = new VectorLoader(root);
                 writer.start(root);
