@@ -154,7 +154,8 @@ impl WasmEngine {
             // required for wasi
             .async_support(true)
             .wasm_backtrace(true)
-            .wasm_backtrace_details(WasmBacktraceDetails::Enable);
+            .wasm_backtrace_details(WasmBacktraceDetails::Enable)
+            .cranelift_opt_level(wasmtime::OptLevel::Speed);
 
         Self {
             engine: wasmtime::Engine::new(&config).expect("failed to create wasm engine"),
