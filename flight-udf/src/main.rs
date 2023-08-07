@@ -200,7 +200,7 @@ fn count_char_chunk(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:8815".parse()?;
+    let addr = "0.0.0.0:8815".parse()?;
     let service = FlightServiceImpl {};
 
     let svc = FlightServiceServer::new(service);
