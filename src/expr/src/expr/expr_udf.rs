@@ -200,20 +200,20 @@ impl<'a> TryFrom<&'a ExprNode> for UdfExpression {
 ///
 /// There is a global cache for clients, so that we can reuse the same client for the same service.
 pub(crate) fn get_or_create_flight_client(link: &str) -> Result<Arc<ArrowFlightUdfClient>> {
-    // static CLIENTS: LazyLock<Mutex<HashMap<String, Weak<ArrowFlightUdfClient>>>> =
-    //     LazyLock::new(Default::default);
-    // let mut clients = CLIENTS.lock().unwrap();
-    // if let Some(client) = clients.get(link).and_then(|c| c.upgrade()) {
-    //     // reuse existing client
-    //     Ok(client)
-    // } else {
+    static CLIENTS: LazyLock<Mutex<HashMap<String, Weak<ArrowFlightUdfClient>>>> =
+        LazyLock::new(Default::default);
+    let mut clients = CLIENTS.lock().unwrap();
+    if let Some(client) = clients.get(link).and_then(|c| c.upgrade()) {
+        // reuse existing client
+        Ok(client)
+    } else {
         // create new client
         let client = Arc::new(tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(ArrowFlightUdfClient::connect(link))
         })?);
-        // clients.insert(link.into(), Arc::downgrade(&client));
+        clients.insert(link.into(), Arc::downgrade(&client));
         Ok(client)
-    // }
+    }
 }
 
 #[cfg(madsim)]
