@@ -23,3 +23,4 @@ crate-type = ["cdylib"]
 
 [profile.release]
 debug = 1
+lto = 'thin'
