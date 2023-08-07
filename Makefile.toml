@@ -1135,7 +1135,11 @@ script = '''
 #!/usr/bin/env bash
 set -e
 
+
 .risingwave/rw-docker/deploy.sh "$@"
+
+aws s3 rm --recursive s3://rw-bench-xxchan-risingwave-hummock
+
 
 echo
 echo "Deploy finished!"

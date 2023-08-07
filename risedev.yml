@@ -361,7 +361,7 @@ profile:
         id: etcd-0
 
   # special config for deployment, see related PR for more information
-  compose-3node-deploy:
+  compose-1node-deploy:
     steps:
       # - use: minio
       #   id: minio-0
@@ -396,19 +396,19 @@ profile:
         async-stack-trace: verbose
         enable-tiered-cache: true
 
-      - use: compute-node
-        id: compute-node-1
-        listen-address: "0.0.0.0"
-        address: ${dns-host:rw-compute-1}
-        async-stack-trace: verbose
-        enable-tiered-cache: true
+      # - use: compute-node
+      #   id: compute-node-1
+      #   listen-address: "0.0.0.0"
+      #   address: ${dns-host:rw-compute-1}
+      #   async-stack-trace: verbose
+      #   enable-tiered-cache: true
 
-      - use: compute-node
-        id: compute-node-2
-        listen-address: "0.0.0.0"
-        address: ${dns-host:rw-compute-2}
-        async-stack-trace: verbose
-        enable-tiered-cache: true
+      # - use: compute-node
+      #   id: compute-node-2
+      #   listen-address: "0.0.0.0"
+      #   address: ${dns-host:rw-compute-2}
+      #   async-stack-trace: verbose
+      #   enable-tiered-cache: true
 
       - use: frontend
         id: frontend-node-0
