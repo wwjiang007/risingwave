@@ -32,7 +32,7 @@ use uuid::Uuid;
 use super::Locations;
 use crate::barrier::{BarrierScheduler, Command};
 use crate::hummock::HummockManagerRef;
-use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv};
+use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv, ViewId, NotificationVersion};
 use crate::model::{ActorId, TableFragments};
 use crate::storage::MetaStore;
 use crate::stream::SourceManagerRef;
@@ -544,6 +544,10 @@ where
         let _reschedule_job_lock = self.reschedule_lock.read().await;
         self.creating_job_info.cancel_jobs(table_ids).await;
     }
+
+    pub async fn alter_materailized_view_to_table(&self, view_id: ViewId) -> MetaResult<NotificationVersion> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
@@ -893,6 +897,10 @@ mod tests {
                 shutdown_tx.send(()).unwrap();
                 join_handle.await.unwrap();
             }
+        }
+
+        async fn alter_materialized_view_to_table(&self, view_id: ViewId) -> MetaResult<()> {
+            todo!()
         }
     }
 

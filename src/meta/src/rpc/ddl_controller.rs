@@ -97,6 +97,7 @@ pub enum DdlCommand {
     DropStreamingJob(StreamingJobId, DropMode),
     ReplaceTable(StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
     AlterRelationName(Relation, String),
+    AlterMaterializedViewToTable(ViewId),
     CreateConnection(Connection),
     DropConnection(ConnectionId),
 }
@@ -263,6 +264,9 @@ where
                 }
                 DdlCommand::DropConnection(connection_id) => {
                     ctrl.drop_connection(connection_id).await
+                }
+                DdlCommand::AlterMaterializedViewToTable(view_id) => {
+                    ctrl.alter_materialized_view_to_table(view_id).await
                 }
             }
         }
@@ -962,6 +966,10 @@ where
         self.catalog_manager
             .cancel_replace_table_procedure(table)
             .await
+    }
+
+    async fn alter_materialized_view_to_table(&self, view_id: ViewId) -> MetaResult<NotificationVersion> {
+        self.stream_manager.alter_materailized_view_to_table(view_id).await
     }
 
     async fn alter_relation_name(
