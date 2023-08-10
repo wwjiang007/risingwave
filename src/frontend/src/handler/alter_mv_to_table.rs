@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pgwire::pg_response::{PgResponse, StatementType};
-use risingwave_common::error::{Result};
+use risingwave_common::error::Result;
 use risingwave_sqlparser::ast::ObjectName;
 
 use super::{HandlerArgs, RwPgResponse};
@@ -35,14 +35,15 @@ pub async fn handle_alter_materialized_view_to_table(
 
     let view_id = {
         let reader = session.env().catalog_reader().read_guard();
-        let (view, schema_name) = reader.get_view_by_name(db_name, schema_path, &real_view_name)?;
+        let (view, schema_name) =
+            reader.get_table_by_name(db_name, schema_path, &real_view_name)?;
         session.check_privilege_for_drop_alter(schema_name, &**view)?;
         view.id
     };
 
     let catalog_writer = session.catalog_writer()?;
     catalog_writer
-        .alter_materialized_view_to_table(view_id)
+        .alter_materialized_view_to_table(view_id.table_id())
         .await?;
 
     Ok(PgResponse::empty_result(

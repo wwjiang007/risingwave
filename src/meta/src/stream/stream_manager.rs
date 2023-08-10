@@ -32,7 +32,9 @@ use uuid::Uuid;
 use super::Locations;
 use crate::barrier::{BarrierScheduler, Command};
 use crate::hummock::HummockManagerRef;
-use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv, ViewId, NotificationVersion};
+use crate::manager::{
+    ClusterManagerRef, FragmentManagerRef, MetaSrvEnv, NotificationVersion, ViewId,
+};
 use crate::model::{ActorId, TableFragments};
 use crate::storage::MetaStore;
 use crate::stream::SourceManagerRef;
@@ -545,8 +547,29 @@ where
         self.creating_job_info.cancel_jobs(table_ids).await;
     }
 
-    pub async fn alter_materailized_view_to_table(&self, view_id: ViewId) -> MetaResult<NotificationVersion> {
-        todo!()
+    pub async fn alter_materialized_view_to_table(
+        &self,
+        view_id: ViewId,
+    ) -> MetaResult<NotificationVersion> {
+        let _reschedule_job_lock = self.reschedule_lock.read().await;
+
+        //self.env.notification_manager().notify_frontend()
+
+        let guard = self.fragment_manager.get_fragment_read_guard().await;
+
+        let keys = guard.table_fragments().keys().collect_vec();
+
+        let table = guard.table_fragments().get(&TableId::from(view_id)).unwrap();
+
+        let mut mv_fragment = table.mview_fragment().unwrap();
+
+        for actor in &mut mv_fragment.actors {
+            // for nodes in actor.nodes {
+            //
+            // }
+        }
+
+        Ok(100)
     }
 }
 

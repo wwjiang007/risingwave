@@ -725,7 +725,16 @@ where
         &self,
         request: Request<AlterMaterializedViewToTableRequest>,
     ) -> Result<Response<AlterMaterializedViewToTableResponse>, Status> {
-        todo!()
+        let req = request.into_inner();
+        let version = self
+            .ddl_controller
+            .run_command(DdlCommand::AlterMaterializedViewToTable(req.view_id))
+            .await?;
+
+        Ok(Response::new(AlterMaterializedViewToTableResponse {
+            status: None,
+            version,
+        }))
     }
 }
 

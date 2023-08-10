@@ -969,7 +969,7 @@ where
     }
 
     async fn alter_materialized_view_to_table(&self, view_id: ViewId) -> MetaResult<NotificationVersion> {
-        self.stream_manager.alter_materailized_view_to_table(view_id).await
+        self.stream_manager.alter_materialized_view_to_table(view_id).await
     }
 
     async fn alter_relation_name(
