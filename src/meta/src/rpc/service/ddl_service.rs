@@ -720,6 +720,13 @@ where
         }
         Ok(Response::new(GetTablesResponse { tables }))
     }
+
+    async fn alter_materialized_view_to_table(
+        &self,
+        request: Request<AlterMaterializedViewToTableRequest>,
+    ) -> Result<Response<AlterMaterializedViewToTableResponse>, Status> {
+        todo!()
+    }
 }
 
 impl<S> DdlServiceImpl<S>

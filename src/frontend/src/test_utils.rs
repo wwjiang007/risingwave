@@ -479,6 +479,10 @@ impl CatalogWriter for MockCatalogWriter {
     async fn alter_source_name(&self, _source_id: u32, _source_name: &str) -> Result<()> {
         unreachable!()
     }
+
+    async fn alter_materialized_view_to_table(&self, _view_id: u32) -> Result<()> {
+        unreachable!()
+    }
 }
 
 impl MockCatalogWriter {

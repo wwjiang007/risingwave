@@ -404,6 +404,14 @@ impl MetaClient {
         Ok((resp.table_id.into(), resp.version))
     }
 
+    pub async fn alter_materialized_view_to_table(&self, view_id: u32) -> Result<CatalogVersion> {
+        let request = AlterMaterializedViewToTableRequest {
+            view_id,
+        };
+        let resp = self.inner.alter_materialized_view_to_table(request).await?;
+        Ok(resp.version)
+    }
+
     pub async fn alter_relation_name(
         &self,
         relation: Relation,
@@ -1656,6 +1664,7 @@ macro_rules! for_all_meta_rpc {
             ,{ stream_client, list_actor_states, ListActorStatesRequest, ListActorStatesResponse }
             ,{ ddl_client, create_table, CreateTableRequest, CreateTableResponse }
             ,{ ddl_client, alter_relation_name, AlterRelationNameRequest, AlterRelationNameResponse }
+            ,{ ddl_client, alter_materialized_view_to_table, AlterMaterializedViewToTableRequest, AlterMaterializedViewToTableResponse }
             ,{ ddl_client, create_materialized_view, CreateMaterializedViewRequest, CreateMaterializedViewResponse }
             ,{ ddl_client, create_view, CreateViewRequest, CreateViewResponse }
             ,{ ddl_client, create_source, CreateSourceRequest, CreateSourceResponse }
