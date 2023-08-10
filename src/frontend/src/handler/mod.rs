@@ -32,6 +32,7 @@ use crate::scheduler::{DistributedQueryStream, LocalQueryStream};
 use crate::session::SessionImpl;
 use crate::utils::WithOptions;
 
+mod alter_mv_to_table;
 mod alter_relation_rename;
 mod alter_system;
 mod alter_table_column;
@@ -483,6 +484,11 @@ pub async fn handle(
                 alter_relation_rename::handle_rename_view(handler_args, name, view_name).await
             }
         }
+        Statement::AlterView {
+            materialized,
+            name,
+            operation: AlterViewOperation::ToTable,
+        } if materialized => alter_mv_to_table::handle_alter_view_to_table(handler_args, name).await,
         Statement::AlterSink {
             name,
             operation: AlterSinkOperation::RenameSink { sink_name },

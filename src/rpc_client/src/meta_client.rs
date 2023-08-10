@@ -417,6 +417,19 @@ impl MetaClient {
         Ok(resp.version)
     }
 
+    pub async fn alter_view_to_btale(
+        &self,
+        relation: Relation,
+        name: &str,
+    ) -> Result<CatalogVersion> {
+        let request = AlterRelationNameRequest {
+            relation: Some(relation),
+            new_name: name.to_string(),
+        };
+        let resp = self.inner.alter_relation_name(request).await?;
+        Ok(resp.version)
+    }
+
     pub async fn replace_table(
         &self,
         table: PbTable,
