@@ -114,6 +114,9 @@ pub fn gen_create_mv_plan(
     }
     let materialize =
         plan_root.gen_materialize_plan(table_name, definition, emit_on_window_close)?;
+
+    println!("mat {:#?}", materialize);
+
     let mut table = materialize.table().to_prost(schema_id, database_id);
     if session.config().get_create_compaction_group_for_mv() {
         table.properties.insert(

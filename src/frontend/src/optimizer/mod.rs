@@ -47,7 +47,7 @@ use risingwave_pb::catalog::WatermarkDesc;
 use self::heuristic_optimizer::ApplyOrder;
 use self::plan_node::{
     generic, stream_enforce_eowc_requirement, BatchProject, Convention, LogicalProject,
-    LogicalSource, StreamDml, StreamMaterialize, StreamProject, StreamRowIdGen, StreamSink,
+    LogicalSource, StreamMaterialize, StreamProject, StreamRowIdGen, StreamSink,
     StreamWatermarkFilter, ToStreamContext,
 };
 #[cfg(debug_assertions)]
@@ -57,9 +57,7 @@ use self::property::{Cardinality, RequiredDist};
 use self::rule::*;
 use crate::catalog::table_catalog::{TableType, TableVersion};
 use crate::optimizer::plan_node::stream::StreamPlanRef;
-use crate::optimizer::plan_node::{
-    BatchExchange, PlanNodeType, PlanTreeNode, RewriteExprsRecursive,
-};
+use crate::optimizer::plan_node::{BatchExchange, PlanNodeType, PlanTreeNode, PlanTreeNodeUnary, RewriteExprsRecursive, StreamDml};
 use crate::optimizer::plan_visitor::TemporalJoinValidator;
 use crate::optimizer::property::Distribution;
 use crate::utils::ColIndexMappingRewriteExt;
@@ -511,6 +509,8 @@ impl PlanRoot {
         let cardinality = self.compute_cardinality();
         let stream_plan = self.gen_optimized_stream_plan(emit_on_window_close)?;
 
+        println!("before create rewrite");
+
         StreamMaterialize::create(
             stream_plan,
             mv_name,
@@ -521,6 +521,7 @@ impl PlanRoot {
             definition,
             TableType::MaterializedView,
             cardinality,
+            true,
         )
     }
 
@@ -543,6 +544,7 @@ impl PlanRoot {
             definition,
             TableType::Index,
             cardinality,
+            false,
         )
     }
 

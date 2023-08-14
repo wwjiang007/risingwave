@@ -29,7 +29,7 @@ use super::{reorganize_elements_id, ExprRewritable, PlanRef, PlanTreeNodeUnary, 
 use crate::catalog::table_catalog::{TableCatalog, TableType, TableVersion};
 use crate::catalog::FragmentId;
 use crate::optimizer::plan_node::derive::derive_pk;
-use crate::optimizer::plan_node::{PlanBase, PlanNodeMeta};
+use crate::optimizer::plan_node::{PlanBase, PlanNodeMeta, StreamDml};
 use crate::optimizer::property::{Cardinality, Distribution, Order, RequiredDist};
 use crate::stream_fragmenter::BuildFragmentGraphState;
 
@@ -64,17 +64,18 @@ impl StreamMaterialize {
         definition: String,
         table_type: TableType,
         cardinality: Cardinality,
+        force_insert_dml: bool,
     ) -> Result<Self> {
         let input = Self::rewrite_input(input, user_distributed_by, table_type)?;
         // the hidden column name might refer some expr id
-        let input = reorganize_elements_id(input);
+        let mut input = reorganize_elements_id(input);
         let columns = derive_columns(input.schema(), out_names, &user_cols)?;
 
         let table = Self::derive_table_catalog(
             input.clone(),
             name,
             user_order_by,
-            columns,
+            columns.clone(),
             definition,
             ConflictBehavior::NoCheck,
             None,
@@ -83,6 +84,15 @@ impl StreamMaterialize {
             None,
             cardinality,
         )?;
+
+        if force_insert_dml {
+            let dml = StreamDml::new(
+                input,
+                false,
+                columns.iter().map(|col| col.column_desc.clone()).collect(),
+            );
+            input = dml.into();
+        }
 
         Ok(Self::new(input, table))
     }
