@@ -658,7 +658,6 @@ fn gen_table_plan_inner(
         version,
     )?;
 
-
     let mut table = materialize.table().to_prost(schema_id, database_id);
 
     table.owner = session.user_id();

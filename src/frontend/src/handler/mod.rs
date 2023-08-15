@@ -488,7 +488,9 @@ pub async fn handle(
             materialized,
             name,
             operation: AlterViewOperation::ToTable,
-        } if materialized => alter_mv_to_table::handle_alter_materialized_view_to_table(handler_args, name).await,
+        } if materialized => {
+            alter_mv_to_table::handle_alter_materialized_view_to_table(handler_args, name).await
+        }
         Statement::AlterSink {
             name,
             operation: AlterSinkOperation::RenameSink { sink_name },

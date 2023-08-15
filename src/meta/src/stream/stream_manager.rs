@@ -553,13 +553,16 @@ where
     ) -> MetaResult<NotificationVersion> {
         let _reschedule_job_lock = self.reschedule_lock.read().await;
 
-        //self.env.notification_manager().notify_frontend()
+        // self.env.notification_manager().notify_frontend()
 
         let guard = self.fragment_manager.get_fragment_read_guard().await;
 
         let keys = guard.table_fragments().keys().collect_vec();
 
-        let table = guard.table_fragments().get(&TableId::from(view_id)).unwrap();
+        let table = guard
+            .table_fragments()
+            .get(&TableId::from(view_id))
+            .unwrap();
 
         let mut mv_fragment = table.mview_fragment().unwrap();
 

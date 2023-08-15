@@ -405,9 +405,7 @@ impl MetaClient {
     }
 
     pub async fn alter_materialized_view_to_table(&self, view_id: u32) -> Result<CatalogVersion> {
-        let request = AlterMaterializedViewToTableRequest {
-            view_id,
-        };
+        let request = AlterMaterializedViewToTableRequest { view_id };
         let resp = self.inner.alter_materialized_view_to_table(request).await?;
         Ok(resp.version)
     }

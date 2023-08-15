@@ -69,7 +69,10 @@ impl DmlManager {
         table_version_id: TableVersionId,
         column_descs: &[ColumnDesc],
     ) -> Result<TableDmlHandleRef> {
-        println!("register reader for table {} table v {}, cols {:?} ", table_id, table_version_id, column_descs);
+        println!(
+            "register reader for table {} table v {}, cols {:?} ",
+            table_id, table_version_id, column_descs
+        );
 
         let mut table_readers = self.table_readers.write();
         // Clear invalid table readers.

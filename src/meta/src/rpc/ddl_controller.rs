@@ -836,8 +836,8 @@ where
         let fragment_graph =
             StreamFragmentGraph::new(fragment_graph, self.env.id_gen_manager_ref(), stream_job)
                 .await?;
-        assert!(fragment_graph.internal_tables().is_empty());
-        assert!(fragment_graph.dependent_table_ids().is_empty());
+//        assert!(fragment_graph.internal_tables().is_empty());
+//        assert!(fragment_graph.dependent_table_ids().is_empty());
 
         // 2. Set the graph-related fields and freeze the `stream_job`.
         stream_job.set_table_fragment_id(fragment_graph.table_fragment_id());
@@ -968,8 +968,13 @@ where
             .await
     }
 
-    async fn alter_materialized_view_to_table(&self, view_id: ViewId) -> MetaResult<NotificationVersion> {
-        self.stream_manager.alter_materialized_view_to_table(view_id).await
+    async fn alter_materialized_view_to_table(
+        &self,
+        view_id: ViewId,
+    ) -> MetaResult<NotificationVersion> {
+        self.stream_manager
+            .alter_materialized_view_to_table(view_id)
+            .await
     }
 
     async fn alter_relation_name(

@@ -57,7 +57,9 @@ use self::property::{Cardinality, RequiredDist};
 use self::rule::*;
 use crate::catalog::table_catalog::{TableType, TableVersion};
 use crate::optimizer::plan_node::stream::StreamPlanRef;
-use crate::optimizer::plan_node::{BatchExchange, PlanNodeType, PlanTreeNode, PlanTreeNodeUnary, RewriteExprsRecursive, StreamDml};
+use crate::optimizer::plan_node::{
+    BatchExchange, PlanNodeType, PlanTreeNode, RewriteExprsRecursive, StreamDml,
+};
 use crate::optimizer::plan_visitor::TemporalJoinValidator;
 use crate::optimizer::property::Distribution;
 use crate::utils::ColIndexMappingRewriteExt;

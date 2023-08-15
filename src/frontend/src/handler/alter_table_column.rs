@@ -70,6 +70,8 @@ pub async fn handle_alter_table_column(
         table.clone()
     };
 
+    println!("prev version {:?}", original_catalog.version);
+
     // TODO(yuhao): alter table with generated columns.
     if original_catalog.has_generated_column() {
         return Err(RwError::from(ErrorCode::BindError(
