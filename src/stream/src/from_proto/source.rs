@@ -128,7 +128,7 @@ impl ExecutorBuilder for SourceExecutorBuilder {
                     source_ctrl_opts,
                 )?))
             } else {
-                let source_exec = SourceExecutor::new(
+                let mut source_exec = SourceExecutor::new(
                     params.actor_context.clone(),
                     schema.clone(),
                     params.pk_indices.clone(),
@@ -167,6 +167,8 @@ impl ExecutorBuilder for SourceExecutorBuilder {
                          (0..table_desc.columns.len()).collect_vec(),
                     );
 
+                    // enable the flag
+                    source_exec.enable_cdc_backfill();
                     let cdc_backfill = CdcBackfillExecutor::new(
                         params.actor_context.clone(),
                         external_table,
