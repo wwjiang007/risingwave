@@ -291,6 +291,8 @@ pub struct ClickHouseCommon {
     pub database: String,
     #[serde(rename = "clickhouse.table")]
     pub table: String,
+    #[serde(rename = "clickhouse.sign")]
+    pub sign: Option<String>,
 }
 
 impl ClickHouseCommon {
