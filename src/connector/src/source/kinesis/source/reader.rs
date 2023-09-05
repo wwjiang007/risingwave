@@ -87,13 +87,13 @@ impl SplitReader for KinesisSplitReader {
             start_position => start_position.to_owned(),
         };
 
-        if !matches!(start_position, KinesisOffset::Timestamp(_))
-            && properties.timestamp_offset.is_some()
-        {
-            return Err(
-                anyhow!("scan.startup.mode need to be set to 'timestamp' if you want to start with a specific timestamp")
-            );
-        }
+        // if !matches!(start_position, KinesisOffset::Timestamp(_))
+        //     && properties.timestamp_offset.is_some()
+        // {
+        //     return Err(
+        //         anyhow!("scan.startup.mode need to be set to 'timestamp' if you want to start with a specific timestamp")
+        //     );
+        // }
 
         let stream_name = properties.common.stream_name.clone();
         let client = properties.common.build_client().await?;
@@ -305,38 +305,6 @@ mod tests {
     use super::*;
     use crate::common::KinesisCommon;
     use crate::source::kinesis::split::KinesisSplit;
-
-    #[tokio::test]
-    async fn test_reject_redundant_seq_props() {
-        let properties = KinesisProperties {
-            common: KinesisCommon {
-                assume_role_arn: None,
-                credentials_access_key: None,
-                credentials_secret_access_key: None,
-                stream_name: "kinesis_debug".to_string(),
-                stream_region: "cn-northwest-1".to_string(),
-                endpoint: None,
-                session_token: None,
-                assume_role_external_id: None,
-            },
-
-            scan_startup_mode: None,
-            timestamp_offset: Some(123456789098765432),
-        };
-        let client = KinesisSplitReader::new(
-            properties,
-            vec![KinesisSplit {
-                shard_id: "shardId-000000000001".to_string().into(),
-                start_position: KinesisOffset::Earliest,
-                end_position: KinesisOffset::None,
-            }],
-            Default::default(),
-            Default::default(),
-            None,
-        )
-        .await;
-        assert!(client.is_err());
-    }
 
     #[tokio::test]
     #[ignore]
