@@ -16,22 +16,29 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 
 pub mod plan_node;
+
 pub use plan_node::{Explain, PlanRef};
+
 pub mod property;
 
 mod delta_join_solver;
 mod heuristic_optimizer;
 mod plan_rewriter;
+
 pub use plan_rewriter::PlanRewriter;
+
 mod plan_visitor;
+
 pub use plan_visitor::{
     ExecutionModeDecider, PlanVisitor, RelationCollectorVisitor, SysTableVisitor,
 };
+
 mod logical_optimization;
 mod optimizer_context;
 mod plan_expr_rewriter;
 mod plan_expr_visitor;
 mod rule;
+
 use fixedbitset::FixedBitSet;
 use itertools::Itertools as _;
 pub use logical_optimization::*;
@@ -350,6 +357,8 @@ impl PlanRoot {
 
     /// Generate create index or create materialize view plan.
     fn gen_stream_plan(&mut self, emit_on_window_close: bool) -> Result<PlanRef> {
+        println!("self is {:#?}", self);
+
         let ctx = self.plan.ctx();
         let explain_trace = ctx.is_explain_trace();
 
@@ -508,8 +517,7 @@ impl PlanRoot {
 
         let column_descs = columns
             .iter()
-            .filter(|&c| (!c.is_generated()))
-            .map(|c| c.column_desc.clone())
+            .filter_map(|c| (!c.is_generated()).then(|| c.column_desc.clone()))
             .collect();
 
         let mut stream_plan = if with_external_source {
@@ -520,10 +528,14 @@ impl PlanRoot {
                     RequiredDist::hash_shard(&pk_column_indices)
                         .enforce_if_not_satisfies(external_source_node, &Order::any())?
                 }
-                PrimaryKeyKind::RowIdAsPrimaryKey | PrimaryKeyKind::AppendOnly => {
+                PrimaryKeyKind::RowIdAsPrimaryKey => {
+                    StreamExchange::new_no_shuffle(external_source_node).into()
+                }
+                PrimaryKeyKind::AppendOnly => {
                     StreamExchange::new_no_shuffle(external_source_node).into()
                 }
             };
+
 
             let dummy_source_node = LogicalSource::new(
                 None,
@@ -551,6 +563,7 @@ impl PlanRoot {
             })
             .into()
         } else {
+
             let dml_node = inject_dml_node(
                 &columns,
                 append_only,
@@ -559,6 +572,7 @@ impl PlanRoot {
                 kind,
                 column_descs,
             )?;
+
 
             StreamUnion::new(Union {
                 all: true,
@@ -603,7 +617,7 @@ impl PlanRoot {
             RequiredDist::ShardByKey(bitset)
         };
 
-        let stream_plan = inline_session_timezone_in_exprs(context, stream_plan)?;
+        // let stream_plan = inline_session_timezone_in_exprs(context, stream_plan)?;
 
         StreamMaterialize::create_for_table(
             stream_plan,
