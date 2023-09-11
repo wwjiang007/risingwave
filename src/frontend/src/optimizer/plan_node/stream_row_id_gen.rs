@@ -27,7 +27,6 @@ pub struct StreamRowIdGen {
     input: PlanRef,
     row_id_index: usize,
 }
-
 impl StreamRowIdGen {
     pub fn new(input: PlanRef, row_id_index: usize) -> Self {
         let distribution = input.distribution().clone();
