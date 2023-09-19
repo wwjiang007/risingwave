@@ -21,10 +21,9 @@ use risingwave_pb::stream_plan::UnionNode;
 
 use super::utils::{childless_record, watermark_pretty, Distill};
 use super::{generic, ExprRewritable, PlanRef};
-use crate::optimizer::plan_node::generic::{GenericPlanNode, Union};
+use crate::optimizer::plan_node::generic::GenericPlanNode;
 use crate::optimizer::plan_node::stream::StreamPlanRef;
 use crate::optimizer::plan_node::{PlanBase, PlanTreeNode, StreamNode};
-use crate::optimizer::property::Distribution;
 use crate::stream_fragmenter::BuildFragmentGraphState;
 
 /// `StreamUnion` implements [`super::LogicalUnion`]
@@ -38,6 +37,7 @@ impl StreamUnion {
     pub fn new(core: generic::Union<PlanRef>) -> Self {
         let inputs = &core.inputs;
         let dist = inputs[0].distribution().clone();
+
         // assert!(inputs.iter().all(|input| *input.distribution() == dist));
         Self::new_with_dist(logical, dist)
     }
