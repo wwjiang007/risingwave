@@ -180,6 +180,7 @@ message SinkDesc {
   // If the sink is from table or mv, this is name of the table/mv. Otherwise
   // it is the name of the sink itself.
   string sink_from_name = 12;
+  optional string sink_into_name = 13;
 }
 
 enum SinkLogStoreType {

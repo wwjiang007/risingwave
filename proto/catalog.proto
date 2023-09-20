@@ -124,6 +124,7 @@ message Sink {
   string db_name = 17;
   string sink_from_name = 18;
   StreamJobStatus stream_job_status = 19;
+  optional string sink_into_name = 20;
 }
 
 message Connection {

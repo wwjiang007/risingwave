@@ -83,6 +83,7 @@ pub struct SinkParam {
     pub sink_type: SinkType,
     pub db_name: String,
     pub sink_from_name: String,
+    pub sink_into_name: Option<String>,
 }
 
 impl SinkParam {
@@ -102,6 +103,7 @@ impl SinkParam {
             ),
             db_name: pb_param.db_name,
             sink_from_name: pb_param.sink_from_name,
+            sink_into_name: pb_param.sink_into_name,
         }
     }
 
@@ -116,6 +118,7 @@ impl SinkParam {
             sink_type: self.sink_type.to_proto().into(),
             db_name: self.db_name.clone(),
             sink_from_name: self.sink_from_name.clone(),
+            sink_into_name: self.sink_into_name.clone(),
         }
     }
 
@@ -140,6 +143,7 @@ impl From<SinkCatalog> for SinkParam {
             sink_type: sink_catalog.sink_type,
             db_name: sink_catalog.db_name,
             sink_from_name: sink_catalog.sink_from_name,
+            sink_into_name: sink_catalog.sink_into_name,
         }
     }
 }

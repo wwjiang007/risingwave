@@ -45,6 +45,7 @@ use risingwave_common::error::{ErrorCode, Result};
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
 use risingwave_common::util::iter_util::ZipEqDebug;
 use risingwave_pb::catalog::WatermarkDesc;
+use risingwave_sqlparser::ast::ObjectName;
 
 use self::heuristic_optimizer::ApplyOrder;
 use self::plan_node::{
@@ -672,14 +673,18 @@ impl PlanRoot {
         emit_on_window_close: bool,
         db_name: String,
         sink_from_table_name: String,
+        sink_into_table_name: Option<String>,
     ) -> Result<StreamSink> {
         let stream_plan = self.gen_optimized_stream_plan(emit_on_window_close)?;
+
+        println!("plan {:#?}", stream_plan);
 
         StreamSink::create(
             stream_plan,
             sink_name,
             db_name,
             sink_from_table_name,
+            sink_into_table_name,
             self.required_dist.clone(),
             self.required_order.clone(),
             self.out_fields.clone(),

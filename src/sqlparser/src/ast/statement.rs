@@ -814,12 +814,20 @@ pub struct CreateSinkStatement {
     pub sink_from: CreateSink,
     pub columns: Vec<Ident>,
     pub emit_mode: Option<EmitMode>,
+    pub into_table_name: Option<ObjectName>,
 }
 
 impl ParseTo for CreateSinkStatement {
     fn parse_to(p: &mut Parser) -> Result<Self, ParserError> {
         impl_parse_to!(if_not_exists => [Keyword::IF, Keyword::NOT, Keyword::EXISTS], p);
         impl_parse_to!(sink_name: ObjectName, p);
+
+        let into_table_name = if p.parse_keyword(Keyword::INTO) {
+            impl_parse_to!(into_table_name: ObjectName, p);
+            Some(into_table_name)
+        } else {
+            None
+        };
 
         let columns = p.parse_parenthesized_column_list(IsOptional::Optional)?;
 
@@ -836,7 +844,7 @@ impl ParseTo for CreateSinkStatement {
         let emit_mode = p.parse_emit_mode()?;
 
         impl_parse_to!(with_properties: WithProperties, p);
-        if with_properties.0.is_empty() {
+        if with_properties.0.is_empty() && into_table_name.is_none() {
             return Err(ParserError::ParserError(
                 "sink properties not provided".to_string(),
             ));
@@ -849,6 +857,7 @@ impl ParseTo for CreateSinkStatement {
             sink_from,
             columns,
             emit_mode,
+            into_table_name,
         })
     }
 }

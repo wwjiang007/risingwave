@@ -782,6 +782,7 @@ impl TestCase {
                     false,
                     "test_db".into(),
                     "test_table".into(),
+                    None,
                 ) {
                     Ok(sink_plan) => {
                         ret.sink_plan = Some(explain_plan(&sink_plan.into()));
