@@ -72,6 +72,7 @@ impl StreamSink {
         name: String,
         db_name: String,
         sink_from_table_name: String,
+        sink_into_table_name: Option<String>,
         user_distributed_by: RequiredDist,
         user_order_by: Order,
         user_cols: FixedBitSet,
@@ -87,6 +88,7 @@ impl StreamSink {
             name,
             db_name,
             sink_from_table_name,
+            sink_into_table_name,
             user_order_by,
             columns,
             definition,
@@ -103,6 +105,7 @@ impl StreamSink {
         name: String,
         db_name: String,
         sink_from_name: String,
+        sink_into_name: Option<String>,
         user_order_by: Order,
         columns: Vec<ColumnCatalog>,
         definition: String,
@@ -162,6 +165,7 @@ impl StreamSink {
             properties: properties.into_inner(),
             sink_type,
             format_desc,
+            sink_into_name,
         };
         Ok((input, sink_desc))
     }
