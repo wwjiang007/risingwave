@@ -332,6 +332,7 @@ pub enum SinkConfig {
     BlackHole,
     ClickHouse(Box<ClickHouseConfig>),
     Nats(NatsConfig),
+    Table,
     #[cfg(any(test, madsim))]
     Test,
 }
@@ -495,6 +496,7 @@ impl SinkImpl {
             }
             #[cfg(any(test, madsim))]
             SinkConfig::Test => SinkImpl::TestSink(build_test_sink(param)?),
+            SinkConfig::Table => todo!(),
         })
     }
 }

@@ -424,6 +424,7 @@ mod tests {
             sink_type: SinkType::AppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let epoch1 = 233;
@@ -597,6 +598,7 @@ mod tests {
             sink_type: SinkType::AppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let (manager, (_join_handle, _stop_tx)) = SinkCoordinatorManager::start_worker(None);
@@ -635,6 +637,7 @@ mod tests {
             sink_type: SinkType::AppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let epoch = 233;
@@ -717,6 +720,7 @@ mod tests {
             sink_type: SinkType::AppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let epoch = 233;

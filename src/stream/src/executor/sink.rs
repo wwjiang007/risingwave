@@ -84,6 +84,8 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
     ) -> StreamExecutorResult<Self> {
         let (log_reader, log_writer) = log_store_factory.build().await;
 
+        println!("param {:?}", sink_param);
+
         let sink = build_sink(sink_param.clone())?;
         let input_schema = columns
             .iter()
@@ -398,6 +400,7 @@ mod test {
             sink_type: SinkType::ForceAppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let sink_executor = SinkExecutor::new(
@@ -496,6 +499,7 @@ mod test {
             sink_type: SinkType::ForceAppendOnly,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let sink_executor = SinkExecutor::new(
