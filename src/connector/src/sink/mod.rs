@@ -412,6 +412,10 @@ impl SinkConfig {
 }
 
 pub fn build_sink(param: SinkParam) -> Result<SinkImpl> {
+    if let Some(table_name) = param.sink_into_name.as_ref() {
+        return Ok(SinkImpl::Table);
+    }
+
     let config = SinkConfig::from_hashmap(param.properties.clone())?;
     SinkImpl::new(config, param)
 }
@@ -429,6 +433,7 @@ pub enum SinkImpl {
     Nats(NatsSink),
     RemoteIceberg(RemoteIcebergSink),
     TestSink(BoxSink),
+    Table,
 }
 
 impl SinkImpl {
@@ -445,6 +450,7 @@ impl SinkImpl {
             SinkImpl::Nats(_) => "nats",
             SinkImpl::RemoteIceberg(_) => "iceberg_java",
             SinkImpl::TestSink(_) => "test",
+            SinkImpl::Table => unreachable!(),
         }
     }
 }
@@ -466,6 +472,7 @@ macro_rules! dispatch_sink {
             SinkImpl::Nats($sink) => $body,
             SinkImpl::RemoteIceberg($sink) => $body,
             SinkImpl::TestSink($sink) => $body,
+            SinkImpl::Table => unreachable!(),
         }
     }};
 }
