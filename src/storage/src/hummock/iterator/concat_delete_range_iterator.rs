@@ -19,6 +19,7 @@ use risingwave_hummock_sdk::HummockEpoch;
 use risingwave_pb::hummock::SstableInfo;
 
 use crate::hummock::iterator::DeleteRangeIterator;
+use crate::hummock::sstable::BackwardSstableDeleteRangeIterator;
 use crate::hummock::sstable_store::SstableStoreRef;
 use crate::hummock::{HummockResult, SstableDeleteRangeIterator};
 use crate::monitor::StoreLocalStatistic;
@@ -122,16 +123,16 @@ impl ConcatDeleteRangeIterator {
         }
         Ok(())
     }
+
+    pub fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+        self.current.as_ref().unwrap().next_extended_user_key()
+    }
 }
 
 impl DeleteRangeIterator for ConcatDeleteRangeIterator {
     type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
-        self.current.as_ref().unwrap().next_extended_user_key()
-    }
 
     fn current_epoch(&self) -> HummockEpoch {
         self.current.as_ref().unwrap().current_epoch()
@@ -179,6 +180,170 @@ impl DeleteRangeIterator for ConcatDeleteRangeIterator {
             .unwrap_or(false)
     }
 }
+
+pub struct BackwardConcatDeleteRangeIterator {
+    sstables: Vec<SstableInfo>,
+    current: Option<BackwardSstableDeleteRangeIterator>,
+    idx: usize,
+    sstable_store: SstableStoreRef,
+    stats: StoreLocalStatistic,
+}
+
+impl BackwardConcatDeleteRangeIterator {
+    pub fn new(sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef) -> Self {
+        Self {
+            sstables,
+            sstable_store,
+            stats: StoreLocalStatistic::default(),
+            idx: 0,
+            current: None,
+        }
+    }
+
+    fn get_sstable(&self, nth: usize) -> &SstableInfo {
+        &self.sstables[nth - 1]
+    }
+
+    async fn next_inner(&mut self) -> HummockResult<()> {
+        if let Some(iter) = self.current.as_mut() {
+            if iter.is_valid() {
+                if iter.is_first_range()
+                    && self.idx > 1
+                    && self.sstables[self.idx - 2].range_tombstone_count > 0
+                    && iter
+                        .current_extended_key()
+                        .left_user_key
+                        .eq(&FullKey::decode(
+                            &self.sstables[self.idx - 1].key_range.as_ref().unwrap().left,
+                        )
+                        .user_key)
+                {
+                    // When the last range of the current sstable is equal to the first range of the
+                    // next sstable, the `next` method would return two same `PointRange`. So we
+                    // must skip one.
+
+                    let exclusive_range_start = iter.current_extended_key().is_exclude_left_key;
+                    let last_key_in_sst_start =
+                        iter.current_extended_key()
+                            .left_user_key
+                            .eq(&FullKey::decode(
+                                &self.sstables[self.idx - 2]
+                                    .key_range
+                                    .as_ref()
+                                    .unwrap()
+                                    .right,
+                            )
+                            .user_key);
+                    iter.next().await?;
+                    if !iter.is_valid() && last_key_in_sst_start {
+                        self.seek_idx(self.idx - 1, None).await?;
+                        let next_range = self.current_extended_key();
+                        debug_assert!(self.is_valid());
+                        if next_range.is_exclude_left_key == exclusive_range_start
+                            && next_range.left_user_key.eq(&FullKey::decode(
+                                &self.sstables[self.idx - 1].key_range.as_ref().unwrap().left,
+                            )
+                            .user_key)
+                        {
+                            self.current.as_mut().unwrap().next().await?;
+                        }
+                        return Ok(());
+                    }
+                } else {
+                    iter.next().await?;
+                }
+                let mut idx = self.idx;
+                while idx > 0 && !self.is_valid() {
+                    self.seek_idx(idx - 1, None).await?;
+                    idx -= 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Seeks to a table, and then seeks to the key if `seek_key` is given.
+    async fn seek_idx(
+        &mut self,
+        idx: usize,
+        seek_key: Option<UserKey<&[u8]>>,
+    ) -> HummockResult<()> {
+        self.current.take();
+        if idx > 0 {
+            if self.sstables[idx - 1].range_tombstone_count == 0 {
+                return Ok(());
+            }
+            let table = self
+                .sstable_store
+                .sstable(&self.sstables[idx - 1], &mut self.stats)
+                .await?;
+            let mut sstable_iter = BackwardSstableDeleteRangeIterator::new(table);
+
+            if let Some(key) = seek_key {
+                sstable_iter.seek(key).await?;
+            } else {
+                sstable_iter.rewind().await?;
+            }
+            self.current = Some(sstable_iter);
+            self.idx = idx;
+        }
+        Ok(())
+    }
+
+    pub fn current_extended_key(&self) -> PointRange<&[u8]> {
+        self.current.as_ref().unwrap().current_extended_key()
+    }
+}
+
+impl DeleteRangeIterator for BackwardConcatDeleteRangeIterator {
+    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+
+    fn current_epoch(&self) -> HummockEpoch {
+        self.current.as_ref().unwrap().current_epoch()
+    }
+
+    fn next(&mut self) -> Self::NextFuture<'_> {
+        self.next_inner()
+    }
+
+    fn rewind(&mut self) -> Self::RewindFuture<'_> {
+        async move {
+            let mut idx = self.sstables.len();
+            self.seek_idx(idx, None).await?;
+            while idx > 0 && !self.is_valid() {
+                self.seek_idx(idx - 1, None).await?;
+                idx -= 1;
+            }
+            Ok(())
+        }
+    }
+
+    fn seek<'a>(&'a mut self, target_user_key: UserKey<&'a [u8]>) -> Self::SeekFuture<'_> {
+        async move {
+            let mut idx = self.sstables.partition_point(|sst| {
+                FullKey::decode(&sst.key_range.as_ref().unwrap().left)
+                    .user_key
+                    .le(&target_user_key)
+            });
+            self.seek_idx(idx, Some(target_user_key)).await?;
+            while idx > 0 && !self.is_valid() {
+                self.seek_idx(idx - 1, None).await?;
+                idx -= 1;
+            }
+            Ok(())
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        self.current
+            .as_ref()
+            .map(|iter| iter.is_valid())
+            .unwrap_or(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use risingwave_common::catalog::TableId;

@@ -18,10 +18,11 @@ use bytes::Bytes;
 use risingwave_hummock_sdk::key::{FullKey, UserKey, UserKeyRange};
 use risingwave_hummock_sdk::HummockEpoch;
 
-use crate::hummock::iterator::{Backward, HummockIterator};
+use crate::hummock::iterator::{Backward, DeleteRangeIterator, HummockIterator};
 use crate::hummock::local_version::pinned_version::PinnedVersion;
 use crate::hummock::value::HummockValue;
 use crate::hummock::HummockResult;
+use crate::hummock::iterator::backward_merge_range_iterator::BackwardMergeRangeIterator;
 use crate::monitor::StoreLocalStatistic;
 
 /// [`BackwardUserIterator`] can be used by user directly.
@@ -56,6 +57,8 @@ pub struct BackwardUserIterator<I: HummockIterator<Direction = Backward>> {
     /// Ensures the SSTs needed by `iterator` won't be vacuumed.
     _version: Option<PinnedVersion>,
 
+    delete_range_iter: BackwardMergeRangeIterator,
+
     /// Store scan statistic
     stats: StoreLocalStatistic,
 }
@@ -69,6 +72,7 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
         read_epoch: u64,
         min_epoch: u64,
         version: Option<PinnedVersion>,
+        delete_range_iter: BackwardMergeRangeIterator,
     ) -> Self {
         Self {
             iterator,
@@ -80,6 +84,7 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
             last_delete: true,
             read_epoch,
             min_epoch,
+            delete_range_iter,
             stats: StoreLocalStatistic::default(),
             _version: version,
         }
@@ -152,17 +157,21 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
                     if !self.last_delete {
                         // We remark that we don't check `out_of_range` here as the other two cases
                         // covered all situation. 2(a)
-                        self.just_met_new_key = true;
-                        self.stats.processed_key_count += 1;
-                        return Ok(());
-                    } else {
-                        // 2(b)
-                        self.last_key = full_key.copy_into();
-                        // If we encounter an out-of-range key, stop early.
-                        if self.out_of_range(self.last_key.user_key.as_ref()) {
-                            self.out_of_range = true;
-                            break;
+                        self.delete_range_iter.next_until(self.last_key.user_key.as_ref()).await?;
+                        if self.delete_range_iter.current_epoch() >= self.last_key.epoch {
+                            self.last_delete = true;
+                        } else {
+                            self.just_met_new_key = true;
+                            self.stats.processed_key_count += 1;
+                            return Ok(());
                         }
+                    }
+                    // 2(b)
+                    self.last_key = full_key.copy_into();
+                    // If we encounter an out-of-range key, stop early.
+                    if self.out_of_range(self.last_key.user_key.as_ref()) {
+                        self.out_of_range = true;
+                        break;
                     }
                 } else {
                     self.stats.skip_multi_version_key_count += 1;
@@ -212,6 +221,9 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
     /// Resets the iterating position to the beginning.
     pub async fn rewind(&mut self) -> HummockResult<()> {
         // Handle range scan
+
+        // Handle multi-version
+        self.reset();
         match &self.key_range.1 {
             Included(end_key) => {
                 let full_key = FullKey {
@@ -219,19 +231,32 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
                     epoch: 0,
                 };
                 self.iterator.seek(full_key.to_ref()).await?;
+                if !self.iterator.is_valid() {
+                    return Ok(());
+                }
+
+                if self.out_of_range(self.iterator.key().user_key) {
+                    self.out_of_range = true;
+                    return Ok(());
+                }
+                self.delete_range_iter.seek(full_key.user_key.as_ref()).await?;
             }
             Excluded(_) => unimplemented!("excluded begin key is not supported"),
-            Unbounded => self.iterator.rewind().await?,
+            Unbounded => {
+                self.iterator.rewind().await?;
+                self.delete_range_iter.rewind().await?;
+            },
         };
 
-        // Handle multi-version
-        self.reset();
         // Handle range scan when key < begin_key
         self.next().await
     }
 
     /// Resets the iterating position to the first position where the key >= provided key.
     pub async fn seek(&mut self, user_key: UserKey<&[u8]>) -> HummockResult<()> {
+        // Handle multi-version
+        self.reset();
+
         // Handle range scan when key > end_key
         let user_key = match &self.key_range.1 {
             Included(end_key) => {
@@ -247,9 +272,16 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
         };
         let full_key = FullKey { user_key, epoch: 0 };
         self.iterator.seek(full_key).await?;
+        if !self.iterator.is_valid() {
+            return Ok(());
+        }
 
-        // Handle multi-version
-        self.reset();
+        if self.out_of_range(self.iterator.key().user_key) {
+            self.out_of_range = true;
+            return Ok(());
+        }
+        self.delete_range_iter.seek(full_key.user_key).await?;
+
         // Handle range scan when key < begin_key
         self.next().await
     }

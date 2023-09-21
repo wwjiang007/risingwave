@@ -377,18 +377,18 @@ impl SstableDeleteRangeIterator {
         debug_assert!(self.next_idx < self.table.value().meta.monotonic_tombstone_events.len());
         self.next_idx + 1 == self.table.value().meta.monotonic_tombstone_events.len()
     }
+
+    pub fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+        self.table.value().meta.monotonic_tombstone_events[self.next_idx]
+            .event_key
+            .as_ref()
+    }
 }
 
 impl DeleteRangeIterator for SstableDeleteRangeIterator {
     type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
-        self.table.value().meta.monotonic_tombstone_events[self.next_idx]
-            .event_key
-            .as_ref()
-    }
 
     fn current_epoch(&self) -> HummockEpoch {
         if self.next_idx > 0 {
@@ -429,6 +429,74 @@ impl DeleteRangeIterator for SstableDeleteRangeIterator {
 
     fn is_valid(&self) -> bool {
         self.next_idx < self.table.value().meta.monotonic_tombstone_events.len()
+    }
+}
+
+pub struct BackwardSstableDeleteRangeIterator {
+    table: TableHolder,
+    idx: usize,
+}
+
+impl BackwardSstableDeleteRangeIterator {
+    pub fn new(table: TableHolder) -> Self {
+        Self {
+            idx: table.value().meta.monotonic_tombstone_events.len(),
+            table,
+        }
+    }
+
+    pub fn current_extended_key(&self) -> PointRange<&[u8]> {
+        self.table.value().meta.monotonic_tombstone_events[self.idx - 1]
+            .event_key
+            .as_ref()
+    }
+
+    pub fn is_first_range(&self) -> bool {
+        self.idx == 1
+    }
+}
+
+impl DeleteRangeIterator for BackwardSstableDeleteRangeIterator {
+    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+
+    fn current_epoch(&self) -> HummockEpoch {
+        self.table.value().meta.monotonic_tombstone_events[self.idx - 1].new_epoch
+    }
+
+    fn next(&mut self) -> Self::NextFuture<'_> {
+        async move {
+            self.idx -= 1;
+            Ok(())
+        }
+    }
+
+    fn rewind(&mut self) -> Self::RewindFuture<'_> {
+        async move {
+            self.idx = self.table.value().meta.monotonic_tombstone_events.len();
+            Ok(())
+        }
+    }
+
+    /// seek to the last position which exactly less thn `target_user_key`
+    fn seek<'a>(&'a mut self, target_user_key: UserKey<&'a [u8]>) -> Self::SeekFuture<'_> {
+        async move {
+            let target_extended_user_key = PointRange::from_user_key(target_user_key, false);
+            self.idx = self
+                .table
+                .value()
+                .meta
+                .monotonic_tombstone_events
+                .partition_point(|MonotonicDeleteEvent { event_key, .. }| {
+                    event_key.as_ref().lt(&target_extended_user_key)
+                });
+            Ok(())
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        self.idx > 0
     }
 }
 

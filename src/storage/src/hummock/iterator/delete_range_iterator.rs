@@ -19,10 +19,16 @@ use risingwave_hummock_sdk::key::{PointRange, UserKey};
 use risingwave_hummock_sdk::HummockEpoch;
 use risingwave_pb::hummock::SstableInfo;
 
-use crate::hummock::iterator::concat_delete_range_iterator::ConcatDeleteRangeIterator;
-use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferDeleteRangeIterator;
+use crate::hummock::iterator::concat_delete_range_iterator::{
+    BackwardConcatDeleteRangeIterator, ConcatDeleteRangeIterator,
+};
+use crate::hummock::shared_buffer::shared_buffer_batch::{
+    BackwardDeleteRangeIterator, SharedBufferDeleteRangeIterator,
+};
 use crate::hummock::sstable_store::SstableStoreRef;
-use crate::hummock::{HummockResult, SstableDeleteRangeIterator};
+use crate::hummock::{
+    BackwardSstableDeleteRangeIterator, HummockResult, SstableDeleteRangeIterator,
+};
 
 /// `DeleteRangeIterator` defines the interface of all delete-range iterators, which is used to
 /// filter keys deleted by some range tombstone
@@ -40,15 +46,6 @@ pub trait DeleteRangeIterator {
     type SeekFuture<'a>: Future<Output = HummockResult<()>> + Send + 'a
     where
         Self: 'a;
-    /// Retrieves the next extended user key that changes current epoch.
-    ///
-    /// Note:
-    /// - Before calling this function, makes sure the iterator `is_valid`.
-    /// - This function should be straightforward and return immediately.
-    ///
-    /// # Panics
-    /// This function will panic if the iterator is invalid.
-    fn next_extended_user_key(&self) -> PointRange<&[u8]>;
 
     /// Retrieves the epoch of the current range delete.
     /// It returns the epoch between the previous `next_user_key` (inclusive) and the current
@@ -108,18 +105,20 @@ pub enum RangeIteratorTyped {
     Concat(ConcatDeleteRangeIterator),
 }
 
-impl DeleteRangeIterator for RangeIteratorTyped {
-    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+impl RangeIteratorTyped {
+    pub fn next_extended_user_key(&self) -> PointRange<&[u8]> {
         match self {
             RangeIteratorTyped::Sst(sst) => sst.next_extended_user_key(),
             RangeIteratorTyped::Batch(batch) => batch.next_extended_user_key(),
             RangeIteratorTyped::Concat(batch) => batch.next_extended_user_key(),
         }
     }
+}
+
+impl DeleteRangeIterator for RangeIteratorTyped {
+    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
 
     fn current_epoch(&self) -> HummockEpoch {
         match self {
@@ -191,6 +190,96 @@ impl Ord for RangeIteratorTyped {
     }
 }
 
+pub enum BackwardRangeIteratorTyped {
+    Sst(BackwardSstableDeleteRangeIterator),
+    Batch(BackwardDeleteRangeIterator),
+    Concat(BackwardConcatDeleteRangeIterator),
+}
+
+impl BackwardRangeIteratorTyped {
+    pub fn current_extended_key(&self) -> PointRange<&[u8]> {
+        match self {
+            BackwardRangeIteratorTyped::Sst(sst) => sst.current_extended_key(),
+            BackwardRangeIteratorTyped::Batch(batch) => batch.current_extended_key(),
+            BackwardRangeIteratorTyped::Concat(batch) => batch.current_extended_key(),
+        }
+    }
+}
+
+impl DeleteRangeIterator for BackwardRangeIteratorTyped {
+    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+
+    fn current_epoch(&self) -> HummockEpoch {
+        match self {
+            BackwardRangeIteratorTyped::Sst(sst) => sst.current_epoch(),
+            BackwardRangeIteratorTyped::Batch(batch) => batch.current_epoch(),
+            BackwardRangeIteratorTyped::Concat(batch) => batch.current_epoch(),
+        }
+    }
+
+    fn next(&mut self) -> Self::NextFuture<'_> {
+        async move {
+            match self {
+                BackwardRangeIteratorTyped::Sst(sst) => sst.next().await,
+                BackwardRangeIteratorTyped::Batch(batch) => batch.next().await,
+                BackwardRangeIteratorTyped::Concat(iter) => iter.next().await,
+            }
+        }
+    }
+
+    fn rewind(&mut self) -> Self::RewindFuture<'_> {
+        async move {
+            match self {
+                BackwardRangeIteratorTyped::Sst(sst) => sst.rewind().await,
+                BackwardRangeIteratorTyped::Batch(batch) => batch.rewind().await,
+                BackwardRangeIteratorTyped::Concat(iter) => iter.rewind().await,
+            }
+        }
+    }
+
+    fn seek<'a>(&'a mut self, target_user_key: UserKey<&'a [u8]>) -> Self::SeekFuture<'_> {
+        async move {
+            match self {
+                BackwardRangeIteratorTyped::Sst(sst) => sst.seek(target_user_key).await,
+                BackwardRangeIteratorTyped::Batch(batch) => batch.seek(target_user_key).await,
+                BackwardRangeIteratorTyped::Concat(iter) => iter.seek(target_user_key).await,
+            }
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        match self {
+            BackwardRangeIteratorTyped::Sst(sst) => sst.is_valid(),
+            BackwardRangeIteratorTyped::Batch(batch) => batch.is_valid(),
+            BackwardRangeIteratorTyped::Concat(iter) => iter.is_valid(),
+        }
+    }
+}
+
+impl PartialEq<Self> for BackwardRangeIteratorTyped {
+    fn eq(&self, other: &Self) -> bool {
+        self.current_extended_key()
+            .eq(&other.current_extended_key())
+    }
+}
+
+impl PartialOrd for BackwardRangeIteratorTyped {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for BackwardRangeIteratorTyped {}
+
+impl Ord for BackwardRangeIteratorTyped {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.current_extended_key()
+            .cmp(&other.current_extended_key())
+    }
+}
+
 /// For each SST or batch delete range iterator, it represents the union set of delete ranges in the
 /// corresponding SST/batch. Therefore delete ranges are then ordered and do not overlap with each
 /// other in every `RangeIteratorTyped`. However, in each SST, since original delete ranges are
@@ -256,6 +345,10 @@ impl ForwardMergeRangeIterator {
                 sstable_store,
             )))
     }
+
+    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+        self.heap.peek().unwrap().next_extended_user_key()
+    }
 }
 
 impl ForwardMergeRangeIterator {
@@ -275,10 +368,6 @@ impl DeleteRangeIterator for ForwardMergeRangeIterator {
     type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
-        self.heap.peek().unwrap().next_extended_user_key()
-    }
 
     fn current_epoch(&self) -> HummockEpoch {
         self.current_epochs

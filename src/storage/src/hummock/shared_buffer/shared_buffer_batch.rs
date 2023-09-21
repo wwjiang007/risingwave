@@ -840,18 +840,18 @@ impl SharedBufferDeleteRangeIterator {
     pub(crate) fn new(inner: Arc<SharedBufferBatchInner>) -> Self {
         Self { inner, next_idx: 0 }
     }
+
+    pub fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+        self.inner.monotonic_tombstone_events[self.next_idx]
+            .event_key
+            .as_ref()
+    }
 }
 
 impl DeleteRangeIterator for SharedBufferDeleteRangeIterator {
     type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
-        self.inner.monotonic_tombstone_events[self.next_idx]
-            .event_key
-            .as_ref()
-    }
 
     fn current_epoch(&self) -> HummockEpoch {
         if self.next_idx > 0 {
@@ -889,6 +889,63 @@ impl DeleteRangeIterator for SharedBufferDeleteRangeIterator {
 
     fn is_valid(&self) -> bool {
         self.next_idx < self.inner.monotonic_tombstone_events.len()
+    }
+}
+
+pub struct BackwardDeleteRangeIterator {
+    inner: Arc<SharedBufferBatchInner>,
+    idx: usize,
+}
+
+impl BackwardDeleteRangeIterator {
+    pub(crate) fn new(inner: Arc<SharedBufferBatchInner>) -> Self {
+        Self { inner, idx: 0 }
+    }
+
+    pub fn current_extended_key(&self) -> PointRange<&[u8]> {
+        self.inner.monotonic_tombstone_events[self.idx - 1]
+            .event_key
+            .as_ref()
+    }
+}
+
+impl DeleteRangeIterator for BackwardDeleteRangeIterator {
+    type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+    type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
+
+    fn current_epoch(&self) -> HummockEpoch {
+        self.inner.monotonic_tombstone_events[self.idx - 1].new_epoch
+    }
+
+    fn next(&mut self) -> Self::NextFuture<'_> {
+        async move {
+            self.idx -= 1;
+            Ok(())
+        }
+    }
+
+    fn rewind(&mut self) -> Self::RewindFuture<'_> {
+        async move {
+            self.idx = self.inner.monotonic_tombstone_events.len();
+            Ok(())
+        }
+    }
+
+    fn seek<'a>(&'a mut self, target_user_key: UserKey<&'a [u8]>) -> Self::SeekFuture<'a> {
+        async move {
+            let target_extended_user_key = PointRange::from_user_key(target_user_key, false);
+            self.idx = self.inner.monotonic_tombstone_events.partition_point(
+                |MonotonicDeleteEvent { event_key, .. }| {
+                    event_key.as_ref().le(&target_extended_user_key)
+                },
+            );
+            Ok(())
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        self.idx > 0
     }
 }
 

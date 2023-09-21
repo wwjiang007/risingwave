@@ -38,6 +38,7 @@ use risingwave_hummock_sdk::key::FullKey;
 
 use crate::hummock::iterator::HummockIteratorUnion::{First, Fourth, Second, Third};
 
+mod backward_merge_range_iterator;
 mod concat_delete_range_iterator;
 mod delete_range_iterator;
 #[cfg(any(test, feature = "test"))]
