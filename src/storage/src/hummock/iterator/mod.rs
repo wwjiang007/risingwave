@@ -39,15 +39,18 @@ use risingwave_hummock_sdk::key::FullKey;
 use crate::hummock::iterator::HummockIteratorUnion::{First, Fourth, Second, Third};
 
 mod backward_merge_range_iterator;
+pub use backward_merge_range_iterator::*;
 mod concat_delete_range_iterator;
 mod delete_range_iterator;
 #[cfg(any(test, feature = "test"))]
 pub mod test_utils;
 
 pub use delete_range_iterator::{
-    DeleteRangeIterator, ForwardMergeRangeIterator, RangeIteratorTyped,
+    DeleteRangeIterator, ForwardMergeRangeIterator, MergeRangeIterator, RangeIteratorTyped,
 };
 
+use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferBatch;
+use crate::hummock::SstableIteratorType;
 use crate::monitor::StoreLocalStatistic;
 
 /// `HummockIterator` defines the interface of all iterators, including `SstableIterator`,
@@ -337,4 +340,16 @@ impl HummockIteratorDirection for Backward {
     fn direction() -> DirectionEnum {
         DirectionEnum::Backward
     }
+}
+
+pub trait IteratorFactory {
+    type Direction: HummockIteratorDirection;
+    type SstableIteratorType: SstableIteratorType<Direction = Self::Direction>;
+    type RangeIterator: MergeRangeIterator;
+
+    fn mut_range_iter(&mut self) -> &mut Self::RangeIterator;
+    fn add_batch_iter(&mut self, batch: SharedBufferBatch);
+    fn add_staging_sst_iter(&mut self, sst: Self::SstableIteratorType);
+    fn add_overlaping_sst_iter(&mut self, iter: Self::SstableIteratorType);
+    fn add_concat_sst_iter(&mut self, iter: ConcatIteratorInner<Self::SstableIteratorType>);
 }

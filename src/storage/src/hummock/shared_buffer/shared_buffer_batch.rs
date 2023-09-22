@@ -511,6 +511,10 @@ impl SharedBufferBatch {
         SharedBufferDeleteRangeIterator::new(self.inner.clone())
     }
 
+    pub fn backward_delete_range_iter(&self) -> BackwardSharedBufferRangeIterator {
+        BackwardSharedBufferRangeIterator::new(self.inner.clone())
+    }
+
     pub fn get_payload(&self) -> &[SharedBufferVersionedEntry] {
         &self.inner
     }
@@ -892,12 +896,12 @@ impl DeleteRangeIterator for SharedBufferDeleteRangeIterator {
     }
 }
 
-pub struct BackwardDeleteRangeIterator {
+pub struct BackwardSharedBufferRangeIterator {
     inner: Arc<SharedBufferBatchInner>,
     idx: usize,
 }
 
-impl BackwardDeleteRangeIterator {
+impl BackwardSharedBufferRangeIterator {
     pub(crate) fn new(inner: Arc<SharedBufferBatchInner>) -> Self {
         Self { inner, idx: 0 }
     }
@@ -909,7 +913,7 @@ impl BackwardDeleteRangeIterator {
     }
 }
 
-impl DeleteRangeIterator for BackwardDeleteRangeIterator {
+impl DeleteRangeIterator for BackwardSharedBufferRangeIterator {
     type NextFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type RewindFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;
     type SeekFuture<'a> = impl Future<Output = HummockResult<()>> + 'a;

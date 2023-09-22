@@ -19,19 +19,14 @@ use risingwave_hummock_sdk::key::{PointRange, UserKey};
 use risingwave_hummock_sdk::HummockEpoch;
 use risingwave_pb::hummock::SstableInfo;
 
-use crate::hummock::iterator::concat_delete_range_iterator::{
-    BackwardConcatDeleteRangeIterator, ConcatDeleteRangeIterator,
-};
+use crate::hummock::iterator::concat_delete_range_iterator::BackwardConcatDeleteRangeIterator;
 use crate::hummock::iterator::delete_range_iterator::{
     BackwardRangeIteratorTyped, DeleteRangeIterator,
 };
-use crate::hummock::shared_buffer::shared_buffer_batch::{
-    BackwardDeleteRangeIterator, SharedBufferDeleteRangeIterator,
-};
+use crate::hummock::iterator::MergeRangeIterator;
+use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferBatch;
 use crate::hummock::sstable_store::SstableStoreRef;
-use crate::hummock::{
-    BackwardSstableDeleteRangeIterator, HummockResult, SstableDeleteRangeIterator,
-};
+use crate::hummock::{BackwardSstableDeleteRangeIterator, HummockResult, TableHolder};
 
 pub struct BackwardMergeRangeIterator {
     heap: BinaryHeap<BackwardRangeIteratorTyped>,
@@ -53,29 +48,32 @@ impl BackwardMergeRangeIterator {
             current_epochs: BTreeSet::new(),
         }
     }
-
-    pub fn add_batch_iter(&mut self, iter: BackwardDeleteRangeIterator) {
-        self.unused_iters
-            .push(BackwardRangeIteratorTyped::Batch(iter));
+}
+impl MergeRangeIterator for BackwardMergeRangeIterator {
+    fn add_batch_iter(&mut self, batch: &SharedBufferBatch) {
+        self.unused_iters.push(BackwardRangeIteratorTyped::Batch(
+            batch.backward_delete_range_iter(),
+        ));
     }
 
-    pub fn add_sst_iter(&mut self, iter: BackwardSstableDeleteRangeIterator) {
-        self.unused_iters
-            .push(BackwardRangeIteratorTyped::Sst(iter));
+    fn add_sst_iter(&mut self, table: TableHolder) {
+        self.unused_iters.push(BackwardRangeIteratorTyped::Sst(
+            BackwardSstableDeleteRangeIterator::new(table),
+        ));
     }
 
-    pub fn add_concat_iter(&mut self, sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef) {
+    fn add_concat_iter(&mut self, sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef) {
         self.unused_iters.push(BackwardRangeIteratorTyped::Concat(
             BackwardConcatDeleteRangeIterator::new(sstables, sstable_store),
         ))
     }
-
-    fn current_extended_key(&self) -> PointRange<&[u8]> {
-        self.heap.peek().unwrap().current_extended_key()
-    }
 }
 
 impl BackwardMergeRangeIterator {
+    fn current_extended_key(&self) -> PointRange<&[u8]> {
+        self.heap.peek().unwrap().current_extended_key()
+    }
+
     pub(super) async fn next_until(
         &mut self,
         target_user_key: UserKey<&[u8]>,

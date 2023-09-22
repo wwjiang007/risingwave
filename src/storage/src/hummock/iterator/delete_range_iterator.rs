@@ -23,11 +23,11 @@ use crate::hummock::iterator::concat_delete_range_iterator::{
     BackwardConcatDeleteRangeIterator, ConcatDeleteRangeIterator,
 };
 use crate::hummock::shared_buffer::shared_buffer_batch::{
-    BackwardDeleteRangeIterator, SharedBufferDeleteRangeIterator,
+    BackwardSharedBufferRangeIterator, SharedBufferBatch, SharedBufferDeleteRangeIterator,
 };
 use crate::hummock::sstable_store::SstableStoreRef;
 use crate::hummock::{
-    BackwardSstableDeleteRangeIterator, HummockResult, SstableDeleteRangeIterator,
+    BackwardSstableDeleteRangeIterator, HummockResult, SstableDeleteRangeIterator, TableHolder,
 };
 
 /// `DeleteRangeIterator` defines the interface of all delete-range iterators, which is used to
@@ -192,7 +192,7 @@ impl Ord for RangeIteratorTyped {
 
 pub enum BackwardRangeIteratorTyped {
     Sst(BackwardSstableDeleteRangeIterator),
-    Batch(BackwardDeleteRangeIterator),
+    Batch(BackwardSharedBufferRangeIterator),
     Concat(BackwardConcatDeleteRangeIterator),
 }
 
@@ -280,6 +280,14 @@ impl Ord for BackwardRangeIteratorTyped {
     }
 }
 
+pub trait MergeRangeIterator {
+    fn add_batch_iter(&mut self, iter: &SharedBufferBatch);
+
+    fn add_sst_iter(&mut self, iter: TableHolder);
+
+    fn add_concat_iter(&mut self, sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef);
+}
+
 /// For each SST or batch delete range iterator, it represents the union set of delete ranges in the
 /// corresponding SST/batch. Therefore delete ranges are then ordered and do not overlap with each
 /// other in every `RangeIteratorTyped`. However, in each SST, since original delete ranges are
@@ -330,24 +338,30 @@ impl ForwardMergeRangeIterator {
         }
     }
 
-    pub fn add_batch_iter(&mut self, iter: SharedBufferDeleteRangeIterator) {
-        self.unused_iters.push(RangeIteratorTyped::Batch(iter));
+    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
+        self.heap.peek().unwrap().next_extended_user_key()
+    }
+}
+
+impl MergeRangeIterator for ForwardMergeRangeIterator {
+    fn add_batch_iter(&mut self, batch: &SharedBufferBatch) {
+        self.unused_iters
+            .push(RangeIteratorTyped::Batch(batch.delete_range_iter()));
     }
 
-    pub fn add_sst_iter(&mut self, iter: SstableDeleteRangeIterator) {
-        self.unused_iters.push(RangeIteratorTyped::Sst(iter));
+    fn add_sst_iter(&mut self, holder: TableHolder) {
+        self.unused_iters
+            .push(RangeIteratorTyped::Sst(SstableDeleteRangeIterator::new(
+                holder,
+            )));
     }
 
-    pub fn add_concat_iter(&mut self, sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef) {
+    fn add_concat_iter(&mut self, sstables: Vec<SstableInfo>, sstable_store: SstableStoreRef) {
         self.unused_iters
             .push(RangeIteratorTyped::Concat(ConcatDeleteRangeIterator::new(
                 sstables,
                 sstable_store,
             )))
-    }
-
-    fn next_extended_user_key(&self) -> PointRange<&[u8]> {
-        self.heap.peek().unwrap().next_extended_user_key()
     }
 }
 

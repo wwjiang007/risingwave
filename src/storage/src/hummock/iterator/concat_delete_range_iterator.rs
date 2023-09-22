@@ -200,10 +200,6 @@ impl BackwardConcatDeleteRangeIterator {
         }
     }
 
-    fn get_sstable(&self, nth: usize) -> &SstableInfo {
-        &self.sstables[nth - 1]
-    }
-
     async fn next_inner(&mut self) -> HummockResult<()> {
         if let Some(iter) = self.current.as_mut() {
             if iter.is_valid() {

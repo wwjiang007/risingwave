@@ -28,20 +28,15 @@ use tracing::{warn, Instrument};
 use super::version::{HummockReadVersion, StagingData, VersionUpdate};
 use crate::error::StorageResult;
 use crate::hummock::event_handler::{HummockEvent, LocalInstanceGuard};
-use crate::hummock::iterator::{
-    ConcatIteratorInner, Forward, HummockIteratorUnion, OrderedMergeIteratorInner,
-    UnorderedMergeIteratorInner, UserIterator,
-};
-use crate::hummock::shared_buffer::shared_buffer_batch::{
-    SharedBufferBatch, SharedBufferBatchIterator,
-};
+use crate::hummock::iterator::{BackwardUserIterator, UnorderedMergeIteratorInner, UserIterator};
+use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferBatch;
 use crate::hummock::store::version::{read_filter_for_local, HummockVersionReader};
 use crate::hummock::utils::{
     cmp_delete_range_left_bounds, do_delete_sanity_check, do_insert_sanity_check,
     do_update_sanity_check, filter_with_delete_range, wait_for_epoch, ENABLE_SANITY_CHECK,
 };
 use crate::hummock::write_limiter::WriteLimiterRef;
-use crate::hummock::{MemoryLimiter, SstableIterator};
+use crate::hummock::{BackwardUnionIterator, HummockStorageIteratorPayload, MemoryLimiter};
 use crate::mem_table::{merge_stream, KeyOp, MemTable};
 use crate::monitor::{HummockStateStoreMetrics, IterLocalMetricsGuard, StoreLocalStatistic};
 use crate::storage_value::StorageValue;
@@ -487,18 +482,6 @@ impl LocalHummockStorage {
     }
 }
 
-pub type StagingDataIterator = OrderedMergeIteratorInner<
-    HummockIteratorUnion<Forward, SharedBufferBatchIterator<Forward>, SstableIterator>,
->;
-type HummockStorageIteratorPayload = UnorderedMergeIteratorInner<
-    HummockIteratorUnion<
-        Forward,
-        StagingDataIterator,
-        SstableIterator,
-        ConcatIteratorInner<SstableIterator>,
-    >,
->;
-
 pub struct HummockStorageIterator {
     inner: UserIterator<HummockStorageIteratorPayload>,
     stats_guard: IterLocalMetricsGuard,
@@ -535,6 +518,48 @@ impl HummockStorageIterator {
 }
 
 impl Drop for HummockStorageIterator {
+    fn drop(&mut self) {
+        self.inner
+            .collect_local_statistic(&mut self.stats_guard.local_stats);
+    }
+}
+
+pub struct BackwardHummockStorageIterator {
+    inner: BackwardUserIterator<UnorderedMergeIteratorInner<BackwardUnionIterator>>,
+    stats_guard: IterLocalMetricsGuard,
+}
+
+impl StateStoreIter for BackwardHummockStorageIterator {
+    type Item = StateStoreIterItem;
+
+    async fn next(&mut self) -> StorageResult<Option<Self::Item>> {
+        let iter = &mut self.inner;
+
+        if iter.is_valid() {
+            let kv = (iter.key().clone(), iter.value().clone());
+            iter.next().await?;
+            Ok(Some(kv))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl BackwardHummockStorageIterator {
+    pub fn new(
+        inner: BackwardUserIterator<UnorderedMergeIteratorInner<BackwardUnionIterator>>,
+        metrics: Arc<HummockStateStoreMetrics>,
+        table_id: TableId,
+        local_stats: StoreLocalStatistic,
+    ) -> Self {
+        Self {
+            inner,
+            stats_guard: IterLocalMetricsGuard::new(metrics, table_id, local_stats),
+        }
+    }
+}
+
+impl Drop for BackwardHummockStorageIterator {
     fn drop(&mut self) {
         self.inner
             .collect_local_statistic(&mut self.stats_guard.local_stats);

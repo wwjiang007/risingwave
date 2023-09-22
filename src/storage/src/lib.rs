@@ -45,6 +45,7 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(async_fn_in_trait)]
 #![feature(return_position_impl_trait_in_trait)]
+#![feature(associated_type_defaults)]
 
 pub mod hummock;
 pub mod memory;

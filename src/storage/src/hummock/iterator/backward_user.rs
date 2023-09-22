@@ -18,11 +18,11 @@ use bytes::Bytes;
 use risingwave_hummock_sdk::key::{FullKey, UserKey, UserKeyRange};
 use risingwave_hummock_sdk::HummockEpoch;
 
+use crate::hummock::iterator::backward_merge_range_iterator::BackwardMergeRangeIterator;
 use crate::hummock::iterator::{Backward, DeleteRangeIterator, HummockIterator};
 use crate::hummock::local_version::pinned_version::PinnedVersion;
 use crate::hummock::value::HummockValue;
 use crate::hummock::HummockResult;
-use crate::hummock::iterator::backward_merge_range_iterator::BackwardMergeRangeIterator;
 use crate::monitor::StoreLocalStatistic;
 
 /// [`BackwardUserIterator`] can be used by user directly.
@@ -64,9 +64,7 @@ pub struct BackwardUserIterator<I: HummockIterator<Direction = Backward>> {
 }
 
 impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
-    /// Creates [`BackwardUserIterator`] with given `read_epoch`.
-    #[cfg(test)]
-    pub(crate) fn with_epoch(
+    pub(crate) fn new(
         iterator: I,
         key_range: UserKeyRange,
         read_epoch: u64,
@@ -157,7 +155,9 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
                     if !self.last_delete {
                         // We remark that we don't check `out_of_range` here as the other two cases
                         // covered all situation. 2(a)
-                        self.delete_range_iter.next_until(self.last_key.user_key.as_ref()).await?;
+                        self.delete_range_iter
+                            .next_until(self.last_key.user_key.as_ref())
+                            .await?;
                         if self.delete_range_iter.current_epoch() >= self.last_key.epoch {
                             self.last_delete = true;
                         } else {
@@ -239,13 +239,15 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
                     self.out_of_range = true;
                     return Ok(());
                 }
-                self.delete_range_iter.seek(full_key.user_key.as_ref()).await?;
+                self.delete_range_iter
+                    .seek(full_key.user_key.as_ref())
+                    .await?;
             }
             Excluded(_) => unimplemented!("excluded begin key is not supported"),
             Unbounded => {
                 self.iterator.rewind().await?;
                 self.delete_range_iter.rewind().await?;
-            },
+            }
         };
 
         // Handle range scan when key < begin_key
@@ -306,7 +308,7 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
 impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
     /// Creates [`BackwardUserIterator`] with maximum epoch.
     pub(crate) fn for_test(iterator: I, key_range: UserKeyRange) -> Self {
-        Self::with_epoch(iterator, key_range, HummockEpoch::MAX, 0, None)
+        Self::new(iterator, key_range, HummockEpoch::MAX, 0, None)
     }
 
     /// Creates [`BackwardUserIterator`] with maximum epoch.
@@ -315,7 +317,7 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
         key_range: UserKeyRange,
         min_epoch: HummockEpoch,
     ) -> Self {
-        Self::with_epoch(iterator, key_range, HummockEpoch::MAX, min_epoch, None)
+        Self::new(iterator, key_range, HummockEpoch::MAX, min_epoch, None)
     }
 }
 
