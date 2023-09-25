@@ -216,7 +216,6 @@ impl DdlService for DdlServiceImpl {
 
         let req = request.into_inner();
 
-        println!("req {:#?}", req);
         let sink = req.get_sink()?.clone();
         let fragment_graph = req.get_fragment_graph()?.clone();
 

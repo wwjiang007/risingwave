@@ -146,6 +146,15 @@ pub trait CatalogWriter: Send + Sync {
     async fn alter_sink_name(&self, sink_id: u32, sink_name: &str) -> Result<()>;
 
     async fn alter_source_name(&self, source_id: u32, source_name: &str) -> Result<()>;
+    async fn create_sink_into_table(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        table_source: Option<PbSource>,
+        table: PbTable,
+        table_graph: StreamFragmentGraph,
+        table_col_index_mapping: ColIndexMapping,
+    ) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -257,6 +266,29 @@ impl CatalogWriter for CatalogWriterImpl {
 
     async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()> {
         let (_id, version) = self.meta_client.create_sink(sink, graph).await?;
+        self.wait_version(version).await
+    }
+
+    async fn create_sink_into_table(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        table_source: Option<PbSource>,
+        table: PbTable,
+        table_graph: StreamFragmentGraph,
+        table_col_index_mapping: ColIndexMapping,
+    ) -> Result<()> {
+        let (_id, version) = self
+            .meta_client
+            .create_sink_into_table(
+                sink,
+                graph,
+                table_source,
+                table,
+                table_graph,
+                table_col_index_mapping,
+            )
+            .await?;
         self.wait_version(version).await
     }
 

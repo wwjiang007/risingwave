@@ -641,8 +641,7 @@ fn gen_table_plan_inner(
     definition: String,
     watermark_descs: Vec<WatermarkDesc>,
     append_only: bool,
-    version: Option<TableVersion>, /* TODO: this should always be `Some` if we support `ALTER
-                                    * TABLE` for `CREATE TABLE AS`. */
+    version: Option<TableVersion>,
 ) -> Result<(PlanRef, Option<PbSource>, PbTable)> {
     let session = context.session_ctx().clone();
     let db_name = session.database();
