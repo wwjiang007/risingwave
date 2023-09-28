@@ -32,6 +32,7 @@ use crate::hummock::utils::{
     cmp_delete_range_left_bounds, do_delete_sanity_check, do_insert_sanity_check,
     do_update_sanity_check, filter_with_delete_range, ENABLE_SANITY_CHECK,
 };
+use crate::panic_store::PanicStateStoreStream;
 use crate::row_serde::value_serde::ValueRowSerde;
 use crate::storage_value::StorageValue;
 use crate::store::*;
@@ -268,6 +269,16 @@ impl MemTable {
         self.buffer.range(key_range)
     }
 
+    pub fn reverse_iter<'a, R>(
+        &'a self,
+        key_range: R,
+    ) -> impl Iterator<Item = (&'a TableKey<Bytes>, &'a KeyOp)>
+        where
+            R: RangeBounds<TableKey<Bytes>> + 'a,
+    {
+        self.buffer.range(key_range).rev()
+    }
+
     fn sub_origin_size(&mut self, origin_value: Option<KeyOp>, key_len: usize) {
         if let Some(origin_value) = origin_value {
             self.kv_size.sub_val(&origin_value);
@@ -307,6 +318,7 @@ pub(crate) async fn merge_stream<'a>(
     inner_stream: impl StateStoreReadIterStream,
     table_id: TableId,
     epoch: u64,
+    reverse: bool,
 ) {
     let inner_stream = inner_stream.peekable();
     pin_mut!(inner_stream);
@@ -333,13 +345,14 @@ pub(crate) async fn merge_stream<'a>(
             }
             (Some(Ok((inner_key, _))), Some((mem_table_key, _))) => {
                 debug_assert_eq!(inner_key.user_key.table_id, table_id);
-                match inner_key.user_key.table_key.cmp(mem_table_key) {
-                    Ordering::Less => {
+                let ord = inner_key.user_key.table_key.cmp(mem_table_key);
+                match (ord, reverse){
+                    (Ordering::Less, false) | (Ordering::Greater, true) => {
                         // yield data from storage
                         let (key, value) = inner_stream.next().await.unwrap()?;
                         yield (key, value);
                     }
-                    Ordering::Equal => {
+                    (Ordering::Equal, true)|(Ordering::Equal, false) => {
                         // both memtable and storage contain the key, so we advance both
                         // iterators and return the data in memory.
 
@@ -357,7 +370,7 @@ pub(crate) async fn merge_stream<'a>(
                             }
                         }
                     }
-                    Ordering::Greater => {
+                    (Ordering::Greater, false) | (Ordering::Less, true) => {
                         // yield data from mem table
                         let (key, key_op) = mem_table_iter.next().unwrap();
 
@@ -411,6 +424,7 @@ impl<S: StateStoreWrite + StateStoreRead> MemtableLocalStateStore<S> {
 
 impl<S: StateStoreWrite + StateStoreRead> LocalStateStore for MemtableLocalStateStore<S> {
     type IterStream<'a> = impl StateStoreIterItemStream + 'a;
+    type ReverseIterStream<'a> = PanicStateStoreStream;
 
     #[allow(clippy::unused_async)]
     async fn may_exist(
@@ -436,7 +450,7 @@ impl<S: StateStoreWrite + StateStoreRead> LocalStateStore for MemtableLocalState
     }
 
     #[allow(clippy::manual_async_fn)]
-    fn iter(
+    fn local_iter(
         &self,
         key_range: TableKeyRange,
         read_options: ReadOptions,
@@ -451,8 +465,18 @@ impl<S: StateStoreWrite + StateStoreRead> LocalStateStore for MemtableLocalState
                 stream,
                 self.table_id,
                 self.epoch(),
+                false,
             ))
         }
+    }
+
+    #[allow(clippy::unused_async)]
+    async fn reverse_iter(
+        &self,
+        _key_range: TableKeyRange,
+        _read_options: ReadOptions,
+    ) -> StorageResult<Self::ReverseIterStream<'_>> {
+        panic!("should not operate on the panic state store!");
     }
 
     fn insert(

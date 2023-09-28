@@ -246,7 +246,7 @@ impl LocalReplayRead for LocalReplayImpl {
             key_range.1.map(|b| TableKey(b.into())),
         );
 
-        let iter = LocalStateStore::iter(&self.0, key_range, read_options.into())
+        let iter = LocalStateStore::local_iter(&self.0, key_range, read_options.into())
             .await
             .unwrap();
 

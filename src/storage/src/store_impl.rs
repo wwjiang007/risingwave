@@ -350,6 +350,7 @@ pub mod verify {
 
     impl<A: LocalStateStore, E: LocalStateStore> LocalStateStore for VerifyStateStore<A, E> {
         type IterStream<'a> = impl StateStoreIterItemStream + 'a;
+        type ReverseIterStream<'a> = impl StateStoreIterItemStream + 'a;
 
         // We don't verify `may_exist` across different state stores because
         // the return value of `may_exist` is implementation specific and may not
@@ -376,7 +377,7 @@ pub mod verify {
         }
 
         #[allow(clippy::manual_async_fn)]
-        fn iter(
+        fn local_iter(
             &self,
             key_range: TableKeyRange,
             read_options: ReadOptions,
@@ -384,10 +385,31 @@ pub mod verify {
             async move {
                 let actual = self
                     .actual
-                    .iter(key_range.clone(), read_options.clone())
+                    .local_iter(key_range.clone(), read_options.clone())
                     .await?;
                 let expected = if let Some(expected) = &self.expected {
-                    Some(expected.iter(key_range, read_options).await?)
+                    Some(expected.local_iter(key_range, read_options).await?)
+                } else {
+                    None
+                };
+
+                Ok(verify_stream(actual, expected))
+            }
+        }
+
+        #[allow(clippy::manual_async_fn)]
+        fn reverse_iter(
+            &self,
+            key_range: TableKeyRange,
+            read_options: ReadOptions,
+        ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_ {
+            async move {
+                let actual = self
+                    .actual
+                    .reverse_iter(key_range.clone(), read_options.clone())
+                    .await?;
+                let expected = if let Some(expected) = &self.expected {
+                    Some(expected.reverse_iter(key_range, read_options).await?)
                 } else {
                     None
                 };
@@ -756,6 +778,12 @@ pub mod boxed_state_store {
             read_options: ReadOptions,
         ) -> StorageResult<BoxLocalStateStoreIterStream<'_>>;
 
+        async fn reverse_scan(
+            &self,
+            key_range: TableKeyRange,
+            read_options: ReadOptions,
+        ) -> StorageResult<BoxLocalStateStoreIterStream<'_>>;
+
         fn insert(
             &mut self,
             key: TableKey<Bytes>,
@@ -802,7 +830,14 @@ pub mod boxed_state_store {
             key_range: TableKeyRange,
             read_options: ReadOptions,
         ) -> StorageResult<BoxLocalStateStoreIterStream<'_>> {
-            Ok(self.iter(key_range, read_options).await?.boxed())
+            Ok(self.local_iter(key_range, read_options).await?.boxed())
+        }
+        async fn reverse_scan(
+            &self,
+            key_range: TableKeyRange,
+            read_options: ReadOptions,
+        ) -> StorageResult<BoxLocalStateStoreIterStream<'_>> {
+            Ok(self.reverse_iter(key_range, read_options).await?.boxed())
         }
 
         fn insert(
@@ -846,6 +881,7 @@ pub mod boxed_state_store {
 
     impl LocalStateStore for BoxDynamicDispatchedLocalStateStore {
         type IterStream<'a> = BoxLocalStateStoreIterStream<'a>;
+        type ReverseIterStream<'a> = BoxLocalStateStoreIterStream<'a>;
 
         fn may_exist(
             &self,
@@ -863,12 +899,20 @@ pub mod boxed_state_store {
             self.deref().get(key, read_options)
         }
 
-        fn iter(
+        fn local_iter(
             &self,
             key_range: TableKeyRange,
             read_options: ReadOptions,
         ) -> impl Future<Output = StorageResult<Self::IterStream<'_>>> + Send + '_ {
             self.deref().iter(key_range, read_options)
+        }
+
+        fn reverse_iter(
+            &self,
+            key_range: TableKeyRange,
+            read_options: ReadOptions,
+        ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_ {
+            self.deref().reverse_scan(key_range, read_options)
         }
 
         fn insert(

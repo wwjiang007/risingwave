@@ -68,6 +68,7 @@ impl StateStoreWrite for PanicStateStore {
 
 impl LocalStateStore for PanicStateStore {
     type IterStream<'a> = PanicStateStoreStream;
+    type ReverseIterStream<'a> = PanicStateStoreStream;
 
     #[allow(clippy::unused_async)]
     async fn may_exist(
@@ -88,11 +89,19 @@ impl LocalStateStore for PanicStateStore {
     }
 
     #[allow(clippy::unused_async)]
-    async fn iter(
+    async fn local_iter(
         &self,
         _key_range: TableKeyRange,
         _read_options: ReadOptions,
     ) -> StorageResult<Self::IterStream<'_>> {
+        panic!("should not operate on the panic state store!");
+    }
+    #[allow(clippy::unused_async)]
+    async fn reverse_iter(
+        &self,
+        _key_range: TableKeyRange,
+        _read_options: ReadOptions,
+    ) -> StorageResult<Self::ReverseIterStream<'_>> {
         panic!("should not operate on the panic state store!");
     }
 

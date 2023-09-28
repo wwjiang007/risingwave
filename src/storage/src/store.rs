@@ -197,6 +197,7 @@ pub trait StateStore: StateStoreRead + StaticSendSync + Clone {
 /// table.
 pub trait LocalStateStore: StaticSendSync {
     type IterStream<'a>: StateStoreIterItemStream + 'a;
+    type ReverseIterStream<'a>: StateStoreIterItemStream + 'a;
 
     /// Point gets a value from the state store.
     /// The result is based on the latest written snapshot.
@@ -211,11 +212,22 @@ pub trait LocalStateStore: StaticSendSync {
     /// `full_key_range` used for iter. (if the `prefix_hint` not None, it should be be included
     /// in `key_range`) The returned iterator will iterate data based on the latest written
     /// snapshot.
-    fn iter(
+    fn local_iter(
         &self,
         key_range: TableKeyRange,
         read_options: ReadOptions,
     ) -> impl Future<Output = StorageResult<Self::IterStream<'_>>> + Send + '_;
+
+    /// Opens and returns an iterator for given `prefix_hint` and `full_key_range`
+    /// Internally, `prefix_hint` will be used to for checking `bloom_filter` and
+    /// `full_key_range` used for iter. (if the `prefix_hint` not None, it should be be included
+    /// in `key_range`) The returned iterator will iterate data based on the latest written
+    /// snapshot.
+    fn reverse_iter(
+        &self,
+        key_range: TableKeyRange,
+        read_options: ReadOptions,
+    ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_;
 
     /// Inserts a key-value entry associated with a given `epoch` into the state store.
     fn insert(

@@ -48,10 +48,7 @@ use crate::hummock::observer_manager::HummockObserverNode;
 use crate::hummock::store::version::read_filter_for_batch;
 use crate::hummock::utils::{validate_safe_epoch, wait_for_epoch};
 use crate::hummock::write_limiter::{WriteLimiter, WriteLimiterRef};
-use crate::hummock::{
-    HummockEpoch, HummockError, HummockResult, MemoryLimiter, SstableObjectIdManager,
-    SstableObjectIdManagerRef, SstableStoreRef,
-};
+use crate::hummock::{HummockEpoch, HummockError, HummockResult, MemoryLimiter, SstableObjectIdManager, SstableObjectIdManagerRef, SstableStoreRef};
 use crate::mem_table::ImmutableMemtable;
 use crate::monitor::{CompactorMetrics, HummockStateStoreMetrics, StoreLocalStatistic};
 use crate::opts::StorageOpts;
@@ -236,7 +233,7 @@ impl HummockStorage {
             .await
     }
 
-    async fn iter_inner(
+    async fn iter_impl(
         &self,
         key_range: TableKeyRange,
         epoch: u64,
@@ -382,7 +379,7 @@ impl StateStoreRead for HummockStorage {
         epoch: u64,
         read_options: ReadOptions,
     ) -> impl Future<Output = StorageResult<Self::IterStream>> + '_ {
-        self.iter_inner(key_range, epoch, read_options)
+        self.iter_impl(key_range, epoch, read_options)
     }
 }
 

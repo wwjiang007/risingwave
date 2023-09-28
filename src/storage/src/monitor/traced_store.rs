@@ -109,6 +109,7 @@ type TracedStateStoreIterStream<S: StateStoreIterItemStream> = impl StateStoreIt
 
 impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
     type IterStream<'a> = impl StateStoreIterItemStream + 'a;
+    type ReverseIterStream<'a> = impl StateStoreIterItemStream + 'a;
 
     fn may_exist(
         &self,
@@ -131,7 +132,7 @@ impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
         )
     }
 
-    fn iter(
+    fn local_iter(
         &self,
         key_range: TableKeyRange,
         read_options: ReadOptions,
@@ -144,10 +145,25 @@ impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
             read_options.clone().into(),
             self.storage_type,
         );
-        self.traced_iter(self.inner.iter(key_range, read_options), span)
+        self.traced_iter(self.inner.local_iter(key_range, read_options), span)
             .map_ok(identity)
     }
-
+    fn reverse_iter(
+        &self,
+        key_range: TableKeyRange,
+        read_options: ReadOptions,
+    ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_ {
+        let (l, r) = key_range.clone();
+        let bytes_key_range = (l.map(|l| l.0), r.map(|r| r.0));
+        let span = TraceSpan::new_iter_span(
+            bytes_key_range,
+            None,
+            read_options.clone().into(),
+            self.storage_type,
+        );
+        self.traced_iter(self.inner.reverse_iter(key_range, read_options), span)
+            .map_ok(identity)
+    }
     fn insert(
         &mut self,
         key: TableKey<Bytes>,

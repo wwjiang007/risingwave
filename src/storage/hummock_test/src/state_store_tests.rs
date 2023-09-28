@@ -1427,7 +1427,7 @@ async fn test_replicated_local_hummock_storage() {
     {
         assert!(local_hummock_storage.read_version().read().is_replicated());
 
-        let s = risingwave_storage::store::LocalStateStore::iter(
+        let s = risingwave_storage::store::LocalStateStore::local_iter(
             &local_hummock_storage,
             (Unbounded, Unbounded),
             read_options.clone(),

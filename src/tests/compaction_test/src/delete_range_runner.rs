@@ -444,7 +444,7 @@ impl NormalState {
     ) -> Vec<(Bytes, Bytes)> {
         let mut iter = pin!(self
             .storage
-            .iter(
+            .local_iter(
                 (
                     Bound::Included(TableKey(Bytes::copy_from_slice(left))),
                     Bound::Excluded(TableKey(Bytes::copy_from_slice(right))),
@@ -476,7 +476,7 @@ impl CheckState for NormalState {
     async fn delete_range(&mut self, left: &[u8], right: &[u8]) {
         let mut iter = Box::pin(
             self.storage
-                .iter(
+                .local_iter(
                     (
                         Bound::Included(Bytes::copy_from_slice(left)).map(TableKey),
                         Bound::Excluded(Bytes::copy_from_slice(right)).map(TableKey),

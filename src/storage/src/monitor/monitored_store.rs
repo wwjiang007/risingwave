@@ -201,6 +201,7 @@ impl<S: StateStoreRead> StateStoreRead for MonitoredStateStore<S> {
 
 impl<S: LocalStateStore> LocalStateStore for MonitoredStateStore<S> {
     type IterStream<'a> = impl StateStoreIterItemStream + 'a;
+    type ReverseIterStream<'a> = impl StateStoreIterItemStream + 'a;
 
     async fn may_exist(
         &self,
@@ -233,14 +234,25 @@ impl<S: LocalStateStore> LocalStateStore for MonitoredStateStore<S> {
         self.monitored_get(self.inner.get(key, read_options), table_id, key_len)
     }
 
-    fn iter(
+    fn local_iter(
         &self,
         key_range: TableKeyRange,
         read_options: ReadOptions,
     ) -> impl Future<Output = StorageResult<Self::IterStream<'_>>> + Send + '_ {
         let table_id = read_options.table_id;
         // TODO: may collect the metrics as local
-        self.monitored_iter(table_id, self.inner.iter(key_range, read_options))
+        self.monitored_iter(table_id, self.inner.local_iter(key_range, read_options))
+            .map_ok(identity)
+    }
+
+    fn reverse_iter(
+        &self,
+        key_range: TableKeyRange,
+        read_options: ReadOptions,
+    ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_ {
+        let table_id = read_options.table_id;
+        // TODO: may collect the metrics as local
+        self.monitored_iter(table_id, self.inner.reverse_iter(key_range, read_options))
             .map_ok(identity)
     }
 

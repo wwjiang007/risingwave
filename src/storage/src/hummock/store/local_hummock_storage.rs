@@ -118,7 +118,7 @@ impl LocalHummockStorage {
         wait_for_epoch(&self.version_update_notifier_tx, wait_epoch).await
     }
 
-    pub async fn iter_inner(
+    pub async fn iter_impl(
         &self,
         table_key_range: TableKeyRange,
         epoch: u64,
@@ -133,6 +133,24 @@ impl LocalHummockStorage {
 
         self.hummock_version_reader
             .iter(table_key_range, epoch, read_options, read_snapshot)
+            .await
+    }
+
+    pub async fn reverse_iter_impl(
+        &self,
+        table_key_range: TableKeyRange,
+        epoch: u64,
+        read_options: ReadOptions,
+    ) -> StorageResult<StreamTypeOfIter<BackwardHummockStorageIterator>> {
+        let read_snapshot = read_filter_for_local(
+            epoch,
+            read_options.table_id,
+            &table_key_range,
+            self.read_version.clone(),
+        )?;
+
+        self.hummock_version_reader
+            .reverse_iter(table_key_range, epoch, read_options, read_snapshot)
             .await
     }
 
@@ -178,13 +196,14 @@ impl StateStoreRead for LocalHummockStorage {
         read_options: ReadOptions,
     ) -> impl Future<Output = StorageResult<Self::IterStream>> + '_ {
         assert!(epoch <= self.epoch());
-        self.iter_inner(key_range, epoch, read_options)
+        self.iter_impl(key_range, epoch, read_options)
             .instrument(tracing::trace_span!("hummock_iter"))
     }
 }
 
 impl LocalStateStore for LocalHummockStorage {
     type IterStream<'a> = impl StateStoreIterItemStream + 'a;
+    type ReverseIterStream<'a> = impl StateStoreIterItemStream + 'a;
 
     fn may_exist(
         &self,
@@ -209,20 +228,41 @@ impl LocalStateStore for LocalHummockStorage {
     }
 
     #[allow(clippy::manual_async_fn)]
-    fn iter(
+    fn local_iter(
         &self,
         key_range: TableKeyRange,
         read_options: ReadOptions,
     ) -> impl Future<Output = StorageResult<Self::IterStream<'_>>> + Send + '_ {
         async move {
             let stream = self
-                .iter_inner(key_range.clone(), self.epoch(), read_options)
+                .iter_impl(key_range.clone(), self.epoch(), read_options)
                 .await?;
             Ok(merge_stream(
                 self.mem_table.iter(key_range),
                 stream,
                 self.table_id,
                 self.epoch(),
+                false,
+            ))
+        }
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn reverse_iter(
+        &self,
+        key_range: TableKeyRange,
+        read_options: ReadOptions,
+    ) -> impl Future<Output = StorageResult<Self::ReverseIterStream<'_>>> + Send + '_ {
+        async move {
+            let stream = self
+                .reverse_iter_impl(key_range.clone(), self.epoch(), read_options)
+                .await?;
+            Ok(merge_stream(
+                self.mem_table.reverse_iter(key_range),
+                stream,
+                self.table_id,
+                self.epoch(),
+                true,
             ))
         }
     }
