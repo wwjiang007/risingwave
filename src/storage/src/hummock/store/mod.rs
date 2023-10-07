@@ -110,7 +110,7 @@ impl IteratorFactory for ForwardIteratorFactory {
         self.staging_iters.push(HummockIteratorUnion::Second(iter));
     }
 
-    fn add_overlaping_sst_iter(&mut self, iter: Self::SstableIteratorType) {
+    fn add_overlapping_sst_iter(&mut self, iter: Self::SstableIteratorType) {
         self.overlapping_iters.push(iter);
     }
 
@@ -185,7 +185,7 @@ impl IteratorFactory for BackwardIteratorFactory {
         self.staging_iters.push(HummockIteratorUnion::Second(iter));
     }
 
-    fn add_overlaping_sst_iter(&mut self, iter: Self::SstableIteratorType) {
+    fn add_overlapping_sst_iter(&mut self, iter: Self::SstableIteratorType) {
         self.overlapping_iters.push(iter);
     }
 

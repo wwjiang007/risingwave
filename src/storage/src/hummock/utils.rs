@@ -23,7 +23,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use risingwave_common::cache::CachePriority;
 use risingwave_common::catalog::{TableId, TableOption};
-use risingwave_hummock_sdk::key::{FullKey, TableKey, UserKey};
+use risingwave_hummock_sdk::key::{FullKey, TableKey, UserKey, UserKeyRangeRef};
 use risingwave_hummock_sdk::{can_concat, HummockEpoch};
 use risingwave_pb::hummock::{HummockVersion, SstableInfo};
 use tokio::sync::watch::Sender;
@@ -97,7 +97,7 @@ pub fn validate_table_key_range(version: &HummockVersion) {
 pub fn filter_single_sst<'a>(
     info: &'a SstableInfo,
     table_id: TableId,
-    user_key_range: &'a (Bound<UserKey<&'a [u8]>>, Bound<UserKey<&'a [u8]>>),
+    user_key_range: &'a UserKeyRangeRef<'a>,
 ) -> bool {
     let table_range = info.key_range.as_ref().unwrap();
     let table_start = FullKey::decode(table_range.left.as_slice()).user_key;
@@ -131,7 +131,7 @@ pub(crate) fn search_sst_idx(ssts: &[SstableInfo], key: UserKey<&[u8]>) -> usize
 pub fn prune_overlapping_ssts<'a>(
     ssts: &'a [SstableInfo],
     table_id: TableId,
-    user_key_range: (Bound<UserKey<&'a [u8]>>, Bound<UserKey<&'a [u8]>>),
+    user_key_range: UserKeyRangeRef<'a>,
 ) -> impl DoubleEndedIterator<Item = &'a SstableInfo> {
     ssts.iter()
         .filter(move |info| filter_single_sst(info, table_id, &user_key_range))

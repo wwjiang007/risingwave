@@ -803,14 +803,14 @@ impl<'a> EmptySliceRef for &'a [u8] {
 }
 
 /// Bound table key range with table id to generate a new user key range.
-pub fn bound_table_key_range(
+pub fn bound_table_key_range<T: AsRef<[u8]> + EmptySliceRef>(
     table_id: TableId,
-    table_key_range: &impl RangeBounds<TableKey<Bytes>>,
-) -> (Bound<UserKey<&Bytes>>, Bound<UserKey<&Bytes>>) {
+    table_key_range: &impl RangeBounds<TableKey<T>>,
+) -> (Bound<UserKey<&T>>, Bound<UserKey<&T>>) {
     let start = match table_key_range.start_bound() {
         Included(b) => Included(UserKey::new(table_id, TableKey(&b.0))),
         Excluded(b) => Excluded(UserKey::new(table_id, TableKey(&b.0))),
-        Unbounded => Included(UserKey::new(table_id, TableKey(&EMPTY_BYTES))),
+        Unbounded => Included(UserKey::new(table_id, TableKey(T::empty_slice_ref()))),
     };
 
     let end = match table_key_range.end_bound() {
@@ -818,7 +818,10 @@ pub fn bound_table_key_range(
         Excluded(b) => Excluded(UserKey::new(table_id, TableKey(&b.0))),
         Unbounded => {
             if let Some(next_table_id) = table_id.table_id().checked_add(1) {
-                Excluded(UserKey::new(next_table_id.into(), TableKey(&EMPTY_BYTES)))
+                Excluded(UserKey::new(
+                    next_table_id.into(),
+                    TableKey(T::empty_slice_ref()),
+                ))
             } else {
                 Unbounded
             }

@@ -479,7 +479,7 @@ impl DeleteRangeIterator for BackwardSstableDeleteRangeIterator {
         }
     }
 
-    /// seek to the last position which exactly less thn `target_user_key`
+    /// seek to the last position which no larger than `target_user_key`
     fn seek<'a>(&'a mut self, target_user_key: UserKey<&'a [u8]>) -> Self::SeekFuture<'_> {
         async move {
             let target_extended_user_key = PointRange::from_user_key(target_user_key, false);
@@ -489,7 +489,7 @@ impl DeleteRangeIterator for BackwardSstableDeleteRangeIterator {
                 .meta
                 .monotonic_tombstone_events
                 .partition_point(|MonotonicDeleteEvent { event_key, .. }| {
-                    event_key.as_ref().lt(&target_extended_user_key)
+                    event_key.as_ref().le(&target_extended_user_key)
                 });
             Ok(())
         }

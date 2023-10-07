@@ -1146,7 +1146,10 @@ where
         };
         let table_key_range = map_table_key_range(key_range);
 
-        Ok(self.local_store.local_iter(table_key_range, read_options).await?)
+        Ok(self
+            .local_store
+            .local_iter(table_key_range, read_options)
+            .await?)
     }
 
     /// This function scans raw key-values from the relational table with specific `pk_prefix`.

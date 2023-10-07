@@ -241,6 +241,7 @@ impl BackwardConcatDeleteRangeIterator {
                             )
                             .user_key)
                         {
+                            // Every file  must have at least two point range, so this iter must be valid.
                             self.current.as_mut().unwrap().next().await?;
                         }
                         return Ok(());
@@ -307,9 +308,8 @@ impl DeleteRangeIterator for BackwardConcatDeleteRangeIterator {
     fn rewind(&mut self) -> Self::RewindFuture<'_> {
         async move {
             let mut idx = self.sstables.len();
-            self.seek_idx(idx, None).await?;
             while idx > 0 && !self.is_valid() {
-                self.seek_idx(idx - 1, None).await?;
+                self.seek_idx(idx, None).await?;
                 idx -= 1;
             }
             Ok(())
@@ -323,9 +323,8 @@ impl DeleteRangeIterator for BackwardConcatDeleteRangeIterator {
                     .user_key
                     .le(&target_user_key)
             });
-            self.seek_idx(idx, Some(target_user_key)).await?;
             while idx > 0 && !self.is_valid() {
-                self.seek_idx(idx - 1, None).await?;
+                self.seek_idx(idx, None).await?;
                 idx -= 1;
             }
             Ok(())

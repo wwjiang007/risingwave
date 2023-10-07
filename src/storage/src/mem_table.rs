@@ -273,8 +273,8 @@ impl MemTable {
         &'a self,
         key_range: R,
     ) -> impl Iterator<Item = (&'a TableKey<Bytes>, &'a KeyOp)>
-        where
-            R: RangeBounds<TableKey<Bytes>> + 'a,
+    where
+        R: RangeBounds<TableKey<Bytes>> + 'a,
     {
         self.buffer.range(key_range).rev()
     }
@@ -346,13 +346,13 @@ pub(crate) async fn merge_stream<'a>(
             (Some(Ok((inner_key, _))), Some((mem_table_key, _))) => {
                 debug_assert_eq!(inner_key.user_key.table_id, table_id);
                 let ord = inner_key.user_key.table_key.cmp(mem_table_key);
-                match (ord, reverse){
+                match (ord, reverse) {
                     (Ordering::Less, false) | (Ordering::Greater, true) => {
                         // yield data from storage
                         let (key, value) = inner_stream.next().await.unwrap()?;
                         yield (key, value);
                     }
-                    (Ordering::Equal, true)|(Ordering::Equal, false) => {
+                    (Ordering::Equal, true) | (Ordering::Equal, false) => {
                         // both memtable and storage contain the key, so we advance both
                         // iterators and return the data in memory.
 
@@ -423,8 +423,9 @@ impl<S: StateStoreWrite + StateStoreRead> MemtableLocalStateStore<S> {
 }
 
 impl<S: StateStoreWrite + StateStoreRead> LocalStateStore for MemtableLocalStateStore<S> {
-    type IterStream<'a> = impl StateStoreIterItemStream + 'a;
     type ReverseIterStream<'a> = PanicStateStoreStream;
+
+    type IterStream<'a> = impl StateStoreIterItemStream + 'a;
 
     #[allow(clippy::unused_async)]
     async fn may_exist(

@@ -832,6 +832,7 @@ pub mod boxed_state_store {
         ) -> StorageResult<BoxLocalStateStoreIterStream<'_>> {
             Ok(self.local_iter(key_range, read_options).await?.boxed())
         }
+
         async fn reverse_scan(
             &self,
             key_range: TableKeyRange,

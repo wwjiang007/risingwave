@@ -315,14 +315,17 @@ mod tests {
         iterator_test_bytes_key_of_epoch, iterator_test_bytes_user_key_of, iterator_test_value_of,
         mock_sstable_store, TEST_KEYS_COUNT,
     };
-    use crate::hummock::iterator::UnorderedMergeIteratorInner;
+    use crate::hummock::iterator::{
+        BackwardMergeRangeIterator, BackwardUserIterator, MergeRangeIterator,
+        UnorderedMergeIteratorInner,
+    };
     use crate::hummock::sstable::{
-        SstableIterator, SstableIteratorReadOptions, SstableIteratorType,
+        Sstable, SstableIterator, SstableIteratorReadOptions, SstableIteratorType,
     };
     use crate::hummock::sstable_store::SstableStoreRef;
     use crate::hummock::test_utils::create_small_table_cache;
     use crate::hummock::value::HummockValue;
-    use crate::hummock::{Sstable, SstableDeleteRangeIterator};
+    use crate::hummock::BackwardSstableIterator;
 
     #[tokio::test]
     async fn test_basic() {
@@ -961,9 +964,7 @@ mod tests {
         let mi = UnorderedMergeIteratorInner::new(iters);
 
         let mut del_iter = ForwardMergeRangeIterator::new(150);
-        del_iter.add_sst_iter(SstableDeleteRangeIterator::new(
-            cache.lookup(table_id, &table_id).unwrap(),
-        ));
+        del_iter.add_sst_iter(cache.lookup(table_id, &table_id).unwrap());
         let mut ui: UserIterator<_> =
             UserIterator::new(mi, (Unbounded, Unbounded), 150, 0, None, del_iter);
 
@@ -987,13 +988,11 @@ mod tests {
         let read_options = SstableIteratorReadOptions::default();
         let iters = vec![SstableIterator::create(
             cache.lookup(table_id, &table_id).unwrap(),
-            sstable_store,
+            sstable_store.clone(),
             Arc::new(read_options),
         )];
         let mut del_iter = ForwardMergeRangeIterator::new(300);
-        del_iter.add_sst_iter(SstableDeleteRangeIterator::new(
-            cache.lookup(table_id, &table_id).unwrap(),
-        ));
+        del_iter.add_sst_iter(cache.lookup(table_id, &table_id).unwrap());
         let mi = UnorderedMergeIteratorInner::new(iters);
         let mut ui: UserIterator<_> =
             UserIterator::new(mi, (Unbounded, Unbounded), 300, 0, None, del_iter);
@@ -1002,6 +1001,26 @@ mod tests {
         assert_eq!(ui.key().user_key, iterator_test_bytes_user_key_of(2));
         ui.next().await.unwrap();
         assert_eq!(ui.key().user_key, iterator_test_bytes_user_key_of(8));
+        ui.next().await.unwrap();
+        assert!(!ui.is_valid());
+
+        let iters = vec![BackwardSstableIterator::create(
+            cache.lookup(table_id, &table_id).unwrap(),
+            sstable_store.clone(),
+            Arc::new(SstableIteratorReadOptions::default()),
+        )];
+        let mi = UnorderedMergeIteratorInner::new(iters);
+
+        let mut del_iter = BackwardMergeRangeIterator::new(150);
+        del_iter.add_sst_iter(cache.lookup(table_id, &table_id).unwrap());
+        let mut ui = BackwardUserIterator::new(mi, (Unbounded, Unbounded), 150, 0, None, del_iter);
+
+        // ----- basic iterate -----
+        ui.rewind().await.unwrap();
+        assert!(ui.is_valid());
+        assert_eq!(ui.key().user_key, iterator_test_bytes_user_key_of(8));
+        ui.next().await.unwrap();
+        assert_eq!(ui.key().user_key, iterator_test_bytes_user_key_of(0));
         ui.next().await.unwrap();
         assert!(!ui.is_valid());
     }

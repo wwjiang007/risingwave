@@ -96,6 +96,7 @@ impl LocalStateStore for PanicStateStore {
     ) -> StorageResult<Self::IterStream<'_>> {
         panic!("should not operate on the panic state store!");
     }
+
     #[allow(clippy::unused_async)]
     async fn reverse_iter(
         &self,

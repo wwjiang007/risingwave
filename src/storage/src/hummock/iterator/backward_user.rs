@@ -158,7 +158,10 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
                         self.delete_range_iter
                             .next_until(self.last_key.user_key.as_ref())
                             .await?;
-                        if self.delete_range_iter.current_epoch() >= self.last_key.epoch {
+                        if self
+                            .delete_range_iter
+                            .check_key_deleted(self.last_key.epoch)
+                        {
                             self.last_delete = true;
                         } else {
                             self.just_met_new_key = true;
@@ -308,7 +311,14 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
 impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
     /// Creates [`BackwardUserIterator`] with maximum epoch.
     pub(crate) fn for_test(iterator: I, key_range: UserKeyRange) -> Self {
-        Self::new(iterator, key_range, HummockEpoch::MAX, 0, None)
+        Self::new(
+            iterator,
+            key_range,
+            HummockEpoch::MAX,
+            0,
+            None,
+            BackwardMergeRangeIterator::new(HummockEpoch::MAX),
+        )
     }
 
     /// Creates [`BackwardUserIterator`] with maximum epoch.
@@ -317,7 +327,14 @@ impl<I: HummockIterator<Direction = Backward>> BackwardUserIterator<I> {
         key_range: UserKeyRange,
         min_epoch: HummockEpoch,
     ) -> Self {
-        Self::new(iterator, key_range, HummockEpoch::MAX, min_epoch, None)
+        Self::new(
+            iterator,
+            key_range,
+            HummockEpoch::MAX,
+            min_epoch,
+            None,
+            BackwardMergeRangeIterator::new(HummockEpoch::MAX),
+        )
     }
 }
 

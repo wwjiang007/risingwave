@@ -339,7 +339,12 @@ async fn run_compare_result(
                 let ret2 = delete_range
                     .scan(start_key.as_bytes(), end_key.as_bytes())
                     .await;
+                let mut ret3 = delete_range
+                    .reverse_scan(start_key.as_bytes(), end_key.as_bytes())
+                    .await;
+                ret3.reverse();
                 assert_eq!(ret1, ret2);
+                assert_eq!(ret1, ret3);
             } else {
                 let overlap = overlap_ranges
                     .iter()
@@ -393,6 +398,7 @@ trait CheckState {
     async fn delete_range(&mut self, left: &[u8], right: &[u8]);
     async fn get(&self, key: &[u8]) -> Option<Bytes>;
     async fn scan(&self, left: &[u8], right: &[u8]) -> Vec<(Bytes, Bytes)>;
+    async fn reverse_scan(&self, left: &[u8], right: &[u8]) -> Vec<(Bytes, Bytes)>;
     fn insert(&mut self, key: &[u8], val: &[u8]);
     async fn commit(&mut self, epoch: u64) -> Result<(), String>;
 }
@@ -436,6 +442,43 @@ impl NormalState {
             .unwrap()
     }
 
+    async fn reverse_scan_impl(
+        &self,
+        left: &[u8],
+        right: &[u8],
+        ignore_range_tombstone: bool,
+    ) -> Vec<(Bytes, Bytes)> {
+        let mut iter = pin!(self
+            .storage
+            .reverse_iter(
+                (
+                    Bound::Included(TableKey(Bytes::copy_from_slice(left))),
+                    Bound::Included(TableKey(Bytes::copy_from_slice(right))),
+                ),
+                ReadOptions {
+                    prefix_hint: None,
+                    ignore_range_tombstone,
+                    retention_seconds: None,
+                    table_id: self.table_id,
+                    read_version_from_backup: false,
+                    prefetch_options: PrefetchOptions::new_for_exhaust_iter(),
+                    cache_policy: CachePolicy::Fill(CachePriority::High),
+                },
+            )
+            .await
+            .unwrap());
+        let mut ret = vec![];
+        while let Some(item) = iter.next().await {
+            let (full_key, val) = item.unwrap();
+            if full_key.user_key.table_key.0.eq(right) {
+                continue;
+            }
+            let tkey = full_key.user_key.table_key.0.clone();
+            ret.push((tkey, val));
+        }
+        ret
+    }
+
     async fn scan_impl(
         &self,
         left: &[u8],
@@ -460,7 +503,7 @@ impl NormalState {
                 },
             )
             .await
-            .unwrap(),);
+            .unwrap());
         let mut ret = vec![];
         while let Some(item) = iter.next().await {
             let (full_key, val) = item.unwrap();
@@ -523,6 +566,10 @@ impl CheckState for NormalState {
         self.scan_impl(left, right, true).await
     }
 
+    async fn reverse_scan(&self, left: &[u8], right: &[u8]) -> Vec<(Bytes, Bytes)> {
+        self.reverse_scan_impl(left, right, true).await
+    }
+
     async fn commit(&mut self, next_epoch: u64) -> Result<(), String> {
         self.commit_impl(vec![], next_epoch).await
     }
@@ -548,6 +595,19 @@ impl CheckState for DeleteRangeState {
 
     async fn scan(&self, left: &[u8], right: &[u8]) -> Vec<(Bytes, Bytes)> {
         let mut ret = self.inner.scan_impl(left, right, false).await;
+        ret.retain(|(key, _)| {
+            for delete_range in &self.delete_ranges {
+                if delete_range.contains(key) {
+                    return false;
+                }
+            }
+            true
+        });
+        ret
+    }
+
+    async fn reverse_scan(&self, left: &[u8], right: &[u8]) -> Vec<(Bytes, Bytes)> {
+        let mut ret = self.inner.reverse_scan_impl(left, right, false).await;
         ret.retain(|(key, _)| {
             for delete_range in &self.delete_ranges {
                 if delete_range.contains(key) {

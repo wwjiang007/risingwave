@@ -82,7 +82,8 @@ pub trait DeleteRangeIterator {
     ///   before starting iteration.
     fn rewind(&mut self) -> Self::RewindFuture<'_>;
 
-    /// Resets iterator and seeks to the first tombstone whose left-end >= provided key, we use this
+    /// For forward-iterator, resets iterator and seeks to the first tombstone whose left-end >= provided key. And for backward-iterator, resets
+    /// iterator and seeks to the last tombstone whose left-end <= provided key. We use this
     /// method to skip tombstones which do not overlap with the provided key.
     ///
     /// Note:

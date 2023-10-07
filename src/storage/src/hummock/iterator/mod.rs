@@ -350,6 +350,6 @@ pub trait IteratorFactory {
     fn mut_range_iter(&mut self) -> &mut Self::RangeIterator;
     fn add_batch_iter(&mut self, batch: SharedBufferBatch);
     fn add_staging_sst_iter(&mut self, sst: Self::SstableIteratorType);
-    fn add_overlaping_sst_iter(&mut self, iter: Self::SstableIteratorType);
+    fn add_overlapping_sst_iter(&mut self, iter: Self::SstableIteratorType);
     fn add_concat_sst_iter(&mut self, iter: ConcatIteratorInner<Self::SstableIteratorType>);
 }

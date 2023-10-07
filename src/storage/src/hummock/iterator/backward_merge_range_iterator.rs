@@ -79,10 +79,15 @@ impl BackwardMergeRangeIterator {
         target_user_key: UserKey<&[u8]>,
     ) -> HummockResult<()> {
         let target_extended_user_key = PointRange::from_user_key(target_user_key, false);
-        while self.is_valid() && self.current_extended_key().le(&target_extended_user_key) {
+        while self.is_valid() && self.current_extended_key().gt(&target_extended_user_key) {
             self.next().await?;
         }
         Ok(())
+    }
+
+    #[inline(always)]
+    pub fn check_key_deleted(&self, key_epoch: HummockEpoch) -> bool {
+        self.current_epoch() >= key_epoch
     }
 }
 
@@ -174,5 +179,146 @@ impl DeleteRangeIterator for BackwardMergeRangeIterator {
             .peek()
             .map(|node| node.is_valid())
             .unwrap_or(false)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use risingwave_common::catalog::TableId;
+    use risingwave_hummock_sdk::key::TableKey;
+    use risingwave_hummock_sdk::HummockSstableId;
+
+    use super::*;
+    use crate::hummock::iterator::test_utils::mock_sstable_store;
+    use crate::hummock::iterator::BackwardMergeRangeIterator;
+    use crate::hummock::test_utils::test_user_key;
+    use crate::hummock::{
+        create_monotonic_events, CompactionDeleteRangesBuilder, DeleteRangeTombstone,
+        SstableBuilder, SstableBuilderOptions, SstableWriterOptions,
+    };
+    use crate::monitor::StoreLocalStatistic;
+
+    async fn generate_sst(
+        data: Vec<DeleteRangeTombstone>,
+        sstable_store: &SstableStoreRef,
+        sst_id: HummockSstableId,
+    ) -> HummockResult<SstableInfo> {
+        let mut builder = CompactionDeleteRangesBuilder::default();
+        for range in data {
+            builder.add_delete_events(create_monotonic_events(vec![range]));
+        }
+        let compaction_delete_range = builder.build_for_compaction();
+        let ranges = compaction_delete_range
+            .get_tombstone_between(test_user_key(b"").as_ref(), test_user_key(b"").as_ref());
+        let opts = SstableBuilderOptions::default();
+        let mut builder = SstableBuilder::for_test(
+            sst_id,
+            sstable_store
+                .clone()
+                .create_sst_writer(sst_id, SstableWriterOptions::default()),
+            opts,
+        );
+        builder.add_monotonic_deletes(ranges);
+        let output = builder.finish().await?;
+        output.writer_output.await.unwrap()?;
+        Ok(output.sst_info.sst_info)
+    }
+
+    #[tokio::test]
+    async fn test_merge_iterator() {
+        let sstable_store = mock_sstable_store();
+        let table_id = TableId::new(0);
+        let data = vec![
+            DeleteRangeTombstone::new_for_test(table_id, b"aaaa".to_vec(), b"bbbb".to_vec(), 10),
+            DeleteRangeTombstone::new_for_test(table_id, b"bbbb".to_vec(), b"eeee".to_vec(), 12),
+            DeleteRangeTombstone::new_for_test(table_id, b"ffff".to_vec(), b"ffgg".to_vec(), 14),
+        ];
+        let sst1 = generate_sst(data, &sstable_store, 1).await.unwrap();
+        let data = vec![
+            DeleteRangeTombstone::new_for_test(table_id, b"bbdd".to_vec(), b"cccc".to_vec(), 16),
+            DeleteRangeTombstone::new_for_test(table_id, b"dddd".to_vec(), b"gggg".to_vec(), 18),
+            DeleteRangeTombstone::new_for_test(table_id, b"ffff".to_vec(), b"hhhh".to_vec(), 20),
+        ];
+        let sst2 = generate_sst(data, &sstable_store, 2).await.unwrap();
+        let data = vec![
+            DeleteRangeTombstone::new_for_test(table_id, b"aaaa".to_vec(), b"bbbb".to_vec(), 22),
+            DeleteRangeTombstone::new_for_test(table_id, b"cccc".to_vec(), b"dddd".to_vec(), 22),
+            DeleteRangeTombstone::new_for_test(table_id, b"eeee".to_vec(), b"ffff".to_vec(), 22),
+        ];
+        let sst3 = generate_sst(data, &sstable_store, 3).await.unwrap();
+
+        let mut del_iter = BackwardMergeRangeIterator::new(150);
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst1, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst2, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst3, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+        del_iter.rewind().await.unwrap();
+        assert!(!del_iter.check_key_deleted(10));
+        del_iter
+            .next_until(UserKey::new(table_id, TableKey(b"cccc")))
+            .await
+            .unwrap();
+        assert!(del_iter.check_key_deleted(14));
+
+        del_iter
+            .next_until(UserKey::new(table_id, TableKey(b"bbbb")))
+            .await
+            .unwrap();
+        assert!(del_iter.check_key_deleted(12));
+        assert!(!del_iter.check_key_deleted(13));
+
+        del_iter
+            .next_until(UserKey::new(table_id, TableKey(b"aaaa")))
+            .await
+            .unwrap();
+        assert!(del_iter.check_key_deleted(20));
+        assert!(!del_iter.check_key_deleted(23));
+
+        // read key between several overlapped range tombstone
+        let mut del_iter = BackwardMergeRangeIterator::new(16);
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst1, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst2, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+        del_iter.add_sst_iter(
+            sstable_store
+                .sstable(&sst3, &mut StoreLocalStatistic::default())
+                .await
+                .unwrap(),
+        );
+
+        del_iter.rewind().await.unwrap();
+        del_iter
+            .next_until(UserKey::new(table_id, TableKey(b"cccc")))
+            .await
+            .unwrap();
+        assert!(!del_iter.check_key_deleted(14));
+        del_iter
+            .next_until(UserKey::new(table_id, TableKey(b"aaaa")))
+            .await
+            .unwrap();
+        assert!(!del_iter.check_key_deleted(11));
+        assert!(del_iter.check_key_deleted(10));
     }
 }

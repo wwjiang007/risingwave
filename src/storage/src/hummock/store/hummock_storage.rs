@@ -48,7 +48,10 @@ use crate::hummock::observer_manager::HummockObserverNode;
 use crate::hummock::store::version::read_filter_for_batch;
 use crate::hummock::utils::{validate_safe_epoch, wait_for_epoch};
 use crate::hummock::write_limiter::{WriteLimiter, WriteLimiterRef};
-use crate::hummock::{HummockEpoch, HummockError, HummockResult, MemoryLimiter, SstableObjectIdManager, SstableObjectIdManagerRef, SstableStoreRef};
+use crate::hummock::{
+    HummockEpoch, HummockError, HummockResult, MemoryLimiter, SstableObjectIdManager,
+    SstableObjectIdManagerRef, SstableStoreRef,
+};
 use crate::mem_table::ImmutableMemtable;
 use crate::monitor::{CompactorMetrics, HummockStateStoreMetrics, StoreLocalStatistic};
 use crate::opts::StorageOpts;

@@ -148,6 +148,7 @@ impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
         self.traced_iter(self.inner.local_iter(key_range, read_options), span)
             .map_ok(identity)
     }
+
     fn reverse_iter(
         &self,
         key_range: TableKeyRange,
@@ -164,6 +165,7 @@ impl<S: LocalStateStore> LocalStateStore for TracedStateStore<S> {
         self.traced_iter(self.inner.reverse_iter(key_range, read_options), span)
             .map_ok(identity)
     }
+
     fn insert(
         &mut self,
         key: TableKey<Bytes>,
