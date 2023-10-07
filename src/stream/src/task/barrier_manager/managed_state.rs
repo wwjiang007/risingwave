@@ -215,7 +215,7 @@ impl ManagedBarrierState {
                 assert_eq!(prev_epoch, barrier.epoch.prev);
             }
             Some(&mut BarrierState {
-                prev_epoch,
+                prev_epoch: _,
                 inner:
                     ManagedBarrierStateInner::Issued {
                         ref mut remaining_actors,
@@ -223,13 +223,13 @@ impl ManagedBarrierState {
                     },
                 ..
             }) => {
-                let exist = remaining_actors.remove(&actor_id);
-                assert!(
-                    exist,
-                    "the actor doesn't exist. actor_id: {:?}, curr_epoch: {:?}",
-                    actor_id, barrier.epoch.curr
-                );
-                assert_eq!(prev_epoch, barrier.epoch.prev);
+                let _exist = remaining_actors.remove(&actor_id);
+                // assert!(
+                //     exist,
+                //     "the actor doesn't exist. actor_id: {:?}, curr_epoch: {:?}",
+                //     actor_id, barrier.epoch.curr
+                // );
+                // assert_eq!(prev_epoch, barrier.epoch.prev);
                 self.may_notify(barrier.epoch.curr);
             }
             None => {

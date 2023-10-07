@@ -16,24 +16,34 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
+use anyhow::Context;
 use itertools::Itertools;
 use maplit::{convert_args, hashmap};
 use pgwire::pg_response::{PgResponse, StatementType};
 use risingwave_common::catalog::{ConnectionId, DatabaseId, SchemaId, UserId};
 use risingwave_common::error::{ErrorCode, Result};
+use risingwave_common::util::column_index_mapping::ColIndexMapping;
 use risingwave_connector::sink::catalog::{SinkCatalog, SinkFormatDesc};
 use risingwave_connector::sink::{
     CONNECTOR_TYPE_KEY, SINK_TYPE_OPTION, SINK_USER_FORCE_APPEND_ONLY_OPTION,
 };
+use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
+use risingwave_pb::catalog::Table;
 use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+use risingwave_pb::stream_plan::{StreamFragmentGraph, StreamNode};
 use risingwave_sqlparser::ast::{
     CreateSink, CreateSinkStatement, EmitMode, Encode, Format, ObjectName, Query, Select,
-    SelectItem, SetExpr, SinkSchema, TableFactor, TableWithJoins,
+    SelectItem, SetExpr, SinkSchema, Statement, TableFactor, TableWithJoins,
 };
+use risingwave_sqlparser::parser::Parser;
 
 use super::create_mv::get_column_names;
 use super::RwPgResponse;
 use crate::binder::Binder;
+use crate::catalog::root_catalog::SchemaPath;
+use crate::handler::create_table::{
+    gen_create_table_plan, gen_create_table_plan_with_source, ColumnIdGenerator,
+};
 use crate::handler::privilege::resolve_query_privileges;
 use crate::handler::HandlerArgs;
 use crate::optimizer::plan_node::Explain;
@@ -123,28 +133,33 @@ pub fn gen_sink_plan(
         context.warn_to_user("EMIT ON WINDOW CLOSE is currently an experimental feature. Please use it with caution.");
     }
 
-    let connector = with_options
-        .get(CONNECTOR_TYPE_KEY)
-        .ok_or_else(|| ErrorCode::BindError(format!("missing field '{CONNECTOR_TYPE_KEY}'")))?;
-    let format_desc = match stmt.sink_schema {
-        // Case A: new syntax `format ... encode ...`
-        Some(f) => {
-            validate_compatibility(connector, &f)?;
-            Some(bind_sink_format_desc(f)?)
-        },
-        None => match with_options.get(SINK_TYPE_OPTION) {
-            // Case B: old syntax `type = '...'`
-            Some(t) => SinkFormatDesc::from_legacy_type(connector, t)?.map(|mut f| {
-                session.notice_to_user("Consider using the newer syntax `FORMAT ... ENCODE ...` instead of `type = '...'`.");
-                if let Some(v) = with_options.get(SINK_USER_FORCE_APPEND_ONLY_OPTION) {
-                    f.options.insert(SINK_USER_FORCE_APPEND_ONLY_OPTION.into(), v.into());
-                }
-                f
-            }),
-            // Case C: no format + encode required
-            None => None,
-        },
+    let format_desc = if let Some(connector) = with_options.get(CONNECTOR_TYPE_KEY) {
+        match stmt.sink_schema {
+            // Case A: new syntax `format ... encode ...`
+            Some(f) => {
+                validate_compatibility(connector, &f)?;
+                Some(bind_sink_format_desc(f)?)
+            },
+            None => match with_options.get(SINK_TYPE_OPTION) {
+                // Case B: old syntax `type = '...'`
+                Some(t) => SinkFormatDesc::from_legacy_type(connector, t)?.map(|mut f| {
+                    session.notice_to_user("Consider using the newer syntax `FORMAT ... ENCODE ...` instead of `type = '...'`.");
+                    if let Some(v) = with_options.get(SINK_USER_FORCE_APPEND_ONLY_OPTION) {
+                        f.options.insert(SINK_USER_FORCE_APPEND_ONLY_OPTION.into(), v.into());
+                    }
+                    f
+                }),
+                // Case C: no format + encode required
+                None => None,
+            },
+        }
+    } else {
+        None
     };
+
+    // let connector = with_options
+    //     .get(CONNECTOR_TYPE_KEY)
+    //     .ok_or_else(|| ErrorCode::BindError(format!("missing field '{CONNECTOR_TYPE_KEY}'")))?;
 
     let mut plan_root = Planner::new(context).plan_query(bound)?;
     if let Some(col_names) = col_names {
@@ -193,9 +208,11 @@ pub async fn handle_create_sink(
 
     session.check_relation_name_duplicated(stmt.sink_name.clone())?;
 
-    let (sink, graph) = {
+    let target_table_name = stmt.into_table_name.clone();
+
+    let (sink, sink_graph) = {
         let context = Rc::new(OptimizerContext::from_handler_args(handle_args));
-        let (query, plan, sink) = gen_sink_plan(&session, context.clone(), stmt)?;
+        let (query, plan, sink) = gen_sink_plan(&session, context.clone(), stmt.clone())?;
         let has_order_by = !query.order_by.is_empty();
         if has_order_by {
             context.warn_to_user(
@@ -203,13 +220,215 @@ pub async fn handle_create_sink(
                     .to_string(),
             );
         }
-        let mut graph = build_graph(plan);
+        let mut graph = build_graph(plan.clone());
         graph.parallelism = session
             .config()
             .get_streaming_parallelism()
             .map(|parallelism| Parallelism { parallelism });
         (sink, graph)
     };
+
+    if let Some(table_name) = target_table_name {
+        // copy start
+        let db_name = session.database();
+        let (schema_name, real_table_name) =
+            Binder::resolve_schema_qualified_name(db_name, table_name.clone())?;
+        let search_path = session.config().get_search_path();
+        let user_name = &session.auth_context().user_name;
+
+        let schema_path = SchemaPath::new(schema_name.as_deref(), &search_path, user_name);
+
+        let original_catalog = {
+            let reader = session.env().catalog_reader().read_guard();
+            let (table, schema_name) =
+                reader.get_table_by_name(db_name, schema_path, &real_table_name)?;
+
+            session.check_privilege_for_drop_alter(schema_name, &**table)?;
+
+            table.clone()
+        };
+
+        // Retrieve the original table definition and parse it to AST.
+        let [definition]: [_; 1] = Parser::parse_sql(&original_catalog.definition)
+            .context("unable to parse original table definition")?
+            .try_into()
+            .unwrap();
+
+        // Create handler args as if we're creating a new table with the altered definition.
+        let handler_args = HandlerArgs::new(session.clone(), &definition, "")?;
+        let col_id_gen = ColumnIdGenerator::new_alter(&original_catalog);
+
+        let Statement::CreateTable {
+            or_replace: _,
+            temporary: _,
+            if_not_exists: _,
+            name: _,
+            columns,
+            constraints,
+            with_options: _,
+            source_schema,
+            source_watermarks,
+            append_only,
+            query: _,
+        } = definition
+        else {
+            panic!("unexpected statement: {:?}", definition);
+        };
+
+        let source_schema = source_schema
+            .clone()
+            .map(|source_schema| source_schema.into_source_schema_v2().0);
+
+        let (graph, table, source) = {
+            let context = OptimizerContext::from_handler_args(handler_args);
+            let (plan, source, table) = match source_schema {
+                Some(source_schema) => {
+                    gen_create_table_plan_with_source(
+                        context,
+                        table_name,
+                        columns,
+                        constraints,
+                        source_schema,
+                        source_watermarks,
+                        col_id_gen,
+                        append_only,
+                    )
+                    .await?
+                }
+                None => gen_create_table_plan(
+                    context,
+                    table_name,
+                    columns,
+                    constraints,
+                    col_id_gen,
+                    source_watermarks,
+                    append_only,
+                )?,
+            };
+
+            //            let (_, plan, _) = gen_sink_plan(&session, context.clone(), stmt)?;
+            let _mat = plan.as_stream_materialize().cloned().unwrap();
+
+            // let plan = plan.clone().as_stream_materialize().as_mut().unwrap();
+
+            // // TODO: avoid this backward conversion.
+            // if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
+            //     Err(ErrorCode::InvalidInputSyntax(
+            //         "alter primary key of table is not supported".to_owned(),
+            //     ))?
+            // }
+
+            let mut graph = StreamFragmentGraph {
+                parallelism: session
+                    .config()
+                    .get_streaming_parallelism()
+                    .map(|parallelism| Parallelism { parallelism }),
+                ..build_graph(plan)
+            };
+
+            fn dfs(node: &StreamNode, depth: i32) {
+                let x = match &node.node_body {
+                    None => "".to_string(),
+                    Some(x) => x.to_string(),
+                };
+
+                println!("{}{} {}", " ".repeat(depth as usize), node.identity, x);
+
+                for input in &node.input {
+                    dfs(input, depth + 1);
+                }
+                // dfs(&node.left, depth + 1);
+                // dfs(&node.right, depth + 1);
+                //    }
+            }
+
+            let _max_fragment_id = graph.fragments.keys().max().cloned().unwrap();
+
+            for (id, fragment) in &mut graph.fragments {
+                println!("id {}, {}", id, fragment.fragment_type_mask);
+
+                // if let Some(x) = &mut fragment.node {
+                //     if let Some(NodeBody::Source(s)) = &x.node_body && s.source_inner.is_none() {
+                //         x.node_body = Some(NodeBody::Merge(MergeNode{
+                //             upstream_actor_id: vec![],
+                //             upstream_fragment_id: 0,
+                //             upstream_dispatcher_type: DispatcherType::Unspecified.into() ,
+                //             fields: vec![],
+                //         }));
+                //     }
+                // }
+                // fragment.
+
+                // if let Some(node) = &fragment.node {
+                //     if let Some(NodeBody::D) = &node.node_body {
+                //
+                //     }
+                // }
+            }
+            // StreamFragment {
+            //     fragment_id: max_fragment_id + 1,
+            //     node: StreamNode {
+            //         operator_id: 0,
+            //         input: vec![],
+            //         stream_key: vec![],
+            //         append_only,
+            //         identity: "".to_string(),
+            //         fields: vec![],
+            //         node_body: None,
+            //     },
+            //     fragment_type_mask: 0,
+            //     requires_singleton: false,
+            //     table_ids_cnt: 0,
+            //     upstream_table_ids: vec![],
+            // };
+
+            // Fill the original table ID.
+            let table = Table {
+                id: original_catalog.id().table_id(),
+                optional_associated_source_id: original_catalog.associated_source_id().map(
+                    |source_id| OptionalAssociatedSourceId::AssociatedSourceId(source_id.into()),
+                ),
+                ..table
+            };
+
+            (graph, table, source)
+        };
+
+        // Calculate the mapping from the original columns to the new columns.
+        let col_index_mapping = ColIndexMapping::with_target_size(
+            original_catalog
+                .columns()
+                .iter()
+                .map(|old_c| {
+                    table.columns.iter().position(|new_c| {
+                        new_c.get_column_desc().unwrap().column_id == old_c.column_id().get_id()
+                    })
+                })
+                .collect(),
+            table.columns.len(),
+        );
+
+        let catalog_writer = session.catalog_writer()?;
+
+        // catalog_writer
+        //     .replace_table(source, table, graph, col_index_mapping)
+        //     .await?;
+
+        catalog_writer
+            .create_sink_into_table(
+                sink.to_proto(),
+                sink_graph,
+                source,
+                table,
+                graph,
+                col_index_mapping,
+            )
+            .await
+            .unwrap();
+
+        return Ok(PgResponse::empty_result(StatementType::ALTER_TABLE));
+        //`
+    }
 
     let _job_guard =
         session
@@ -223,7 +442,9 @@ pub async fn handle_create_sink(
             ));
 
     let catalog_writer = session.catalog_writer()?;
-    catalog_writer.create_sink(sink.to_proto(), graph).await?;
+    catalog_writer
+        .create_sink(sink.to_proto(), sink_graph)
+        .await?;
 
     Ok(PgResponse::empty_result(StatementType::CREATE_SINK))
 }

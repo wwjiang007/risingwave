@@ -373,6 +373,31 @@ impl MetaClient {
         let request = CreateSinkRequest {
             sink: Some(sink),
             fragment_graph: Some(graph),
+            replace_table: None,
+        };
+
+        let resp = self.inner.create_sink(request).await?;
+        Ok((resp.sink_id, resp.version))
+    }
+
+    pub async fn create_sink_into_table(
+        &self,
+        sink: PbSink,
+        sink_graph: StreamFragmentGraph,
+        table_source: Option<PbSource>,
+        table: PbTable,
+        table_graph: StreamFragmentGraph,
+        table_col_index_mapping: ColIndexMapping,
+    ) -> Result<(u32, CatalogVersion)> {
+        let request = CreateSinkRequest {
+            sink: Some(sink),
+            fragment_graph: Some(sink_graph),
+            replace_table: Some(ReplaceTablePlanRequest {
+                source: table_source,
+                table: Some(table),
+                fragment_graph: Some(table_graph),
+                table_col_index_mapping: Some(table_col_index_mapping.to_protobuf()),
+            }),
         };
 
         let resp = self.inner.create_sink(request).await?;

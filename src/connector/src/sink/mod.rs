@@ -315,6 +315,7 @@ impl SinkImpl {
             .properties
             .get(CONNECTOR_TYPE_KEY)
             .ok_or_else(|| SinkError::Config(anyhow!("missing config: {}", CONNECTOR_TYPE_KEY)))?;
+
         match_sink_name_str!(
             sink_type.to_lowercase().as_str(),
             SinkType,

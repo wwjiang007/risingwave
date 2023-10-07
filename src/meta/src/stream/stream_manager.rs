@@ -461,6 +461,140 @@ impl GlobalStreamManager {
         Ok(())
     }
 
+    pub async fn create_sink_into_table(
+        &self,
+        x: (TableFragments, CreateStreamingJobContext),
+        x0: (ReplaceTableContext, TableFragments),
+    ) -> MetaResult<()> {
+        println!("123123");
+
+        let (create_sink_table_fragments, create_sink_ctx) = x;
+
+        let _table_id = create_sink_table_fragments.table_id();
+
+        // let execution = StreamingJobExecution::new(table_id, sender.clone());
+        // self.creating_job_info.add_job(execution).await;
+
+        let CreateStreamingJobContext {
+            dispatchers,
+            upstream_mview_actors,
+            internal_tables: _,
+            building_locations,
+            existing_locations,
+            table_properties: _,
+            definition,
+            mv_table_id: _,
+        } = create_sink_ctx;
+
+        let sink_dispatchers = dispatchers;
+        let sink_definition = definition;
+
+        self.build_actors(
+            &create_sink_table_fragments,
+            &building_locations,
+            &existing_locations,
+        )
+        .await?;
+
+        // Add table fragments to meta store with state: `State::Initial`.
+        self.fragment_manager
+            .start_create_table_fragments(create_sink_table_fragments.clone())
+            .await?;
+
+        let _table_id = create_sink_table_fragments.table_id();
+
+        let (replace_ctx, replace_table_fragments) = x0;
+
+        let ReplaceTableContext {
+            old_table_fragments,
+            merge_updates,
+            dispatchers,
+            building_locations,
+            existing_locations,
+            table_properties: _,
+        } = replace_ctx;
+
+        let table_old_table_fragments = old_table_fragments;
+        let table_new_table_fragments = replace_table_fragments.clone();
+        let table_merge_updates = merge_updates;
+        let table_dispatchers = dispatchers;
+
+        self.build_actors(
+            &replace_table_fragments,
+            &building_locations,
+            &existing_locations,
+        )
+        .await?;
+
+        // Add table fragments to meta store with state: `State::Initial`.
+        self.fragment_manager
+            .start_create_table_fragments(replace_table_fragments.clone())
+            .await?;
+
+        let dummy_table_id = replace_table_fragments.table_id();
+
+        let table_init_split_assignment = self
+            .source_manager
+            .pre_allocate_splits(&dummy_table_id)
+            .await?;
+
+        //     upstream_mview_actors,
+        //                 dispatchers,
+        //                 init_split_assignment,
+        //                 definition: definition.to_string(),
+        self.barrier_scheduler
+            .run_command(Command::CreateSinkIntoTable {
+                sink_table_fragments: replace_table_fragments,
+                sink_upstream_mview_actors: upstream_mview_actors,
+                sink_dispatchers,
+                sink_definition,
+                table_old_table_fragments,
+                table_new_table_fragments,
+                table_merge_updates,
+                table_dispatchers,
+                table_init_split_assignment,
+            })
+            .await
+            .expect("TODO: panic message");
+
+        // if let Err(err) = self
+        //     .barrier_scheduler
+        //     .run_config_change_command_with_pause(Command::ReplaceTable {
+        //         old_table_fragments,
+        //         new_table_fragments: replace_table_fragments,
+        //         merge_updates,
+        //         dispatchers,
+        //         init_split_assignment,
+        //     })
+        //     .await
+        // {
+        //     self.fragment_manager
+        //         .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(dummy_table_id)))
+        //         .await?;
+        //     return Err(err);
+        // }
+
+        // let init_split_assignment = self.source_manager.pre_allocate_splits(&table_id).await?;
+
+        // if let Err(err) = self
+        //     .barrier_scheduler
+        //     .run_command(Command::CreateStreamingJob {
+        //         table_fragments,
+        //         upstream_mview_actors,
+        //         dispatchers,
+        //         init_split_assignment: None,
+        //         definition: definition.to_string(),
+        //     })
+        //     .await
+        // {
+        //     self.fragment_manager
+        //         .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(table_id)))
+        //         .await?;
+        //     return Err(err);
+        // }
+        Ok(())
+    }
+
     pub async fn replace_table(
         &self,
         table_fragments: TableFragments,

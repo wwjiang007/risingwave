@@ -63,23 +63,32 @@ impl ExecutorBuilder for SinkExecutorBuilder {
             .collect_vec();
 
         let connector = {
-            let sink_type = properties.get(CONNECTOR_TYPE_KEY).ok_or_else(|| {
-                SinkError::Config(anyhow!("missing config: {}", CONNECTOR_TYPE_KEY))
-            })?;
+            // let sink_type = properties.get(CONNECTOR_TYPE_KEY).ok_or_else(|| {
+            //     SinkError::Config(anyhow!("missing config: {}", CONNECTOR_TYPE_KEY))
+            // })?;
 
-            use risingwave_connector::sink::Sink;
+            // let sink_type = properties
+            //     .get(CONNECTOR_TYPE_KEY)
+            //     .cloned()
+            //     .unwrap_or_else(|| "table".to_string());
 
-            match_sink_name_str!(
-                sink_type.to_lowercase().as_str(),
-                SinkType,
-                Ok(SinkType::SINK_NAME),
-                |other| {
-                    Err(SinkError::Config(anyhow!(
-                        "unsupported sink connector {}",
-                        other
-                    )))
-                }
-            )
+            if let Some(sink_type) = properties.get(CONNECTOR_TYPE_KEY) {
+                use risingwave_connector::sink::Sink;
+
+                match_sink_name_str!(
+                    sink_type.to_lowercase().as_str(),
+                    SinkType,
+                    Ok(SinkType::SINK_NAME),
+                    |other| {
+                        Err(SinkError::Config(anyhow!(
+                            "unsupported sink connector {}",
+                            other
+                        )))
+                    }
+                )
+            } else {
+                Ok("table")
+            }
         }?;
         let format_desc = match &sink_desc.format_desc {
             // Case A: new syntax `format ... encode ...`

@@ -31,6 +31,7 @@ use risingwave_pb::catalog::{PbSource, PbTable, StreamSourceInfo, WatermarkDesc}
 use risingwave_pb::plan_common::column_desc::GeneratedOrDefaultColumn;
 use risingwave_pb::plan_common::{DefaultColumnDesc, GeneratedColumnDesc};
 use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+use risingwave_pb::stream_plan::StreamNode;
 use risingwave_sqlparser::ast::{
     ColumnDef, ColumnOption, DataType as AstDataType, Format, ObjectName, SourceSchemaV2,
     SourceWatermark, TableConstraint,
@@ -734,6 +735,8 @@ fn gen_table_plan_inner(
         is_external_source,
     )?;
 
+    println!("mat table {:#?}", materialize);
+
     let mut table = materialize.table().to_prost(schema_id, database_id);
 
     table.owner = session.user_id();
@@ -803,6 +806,29 @@ pub async fn handle_create_table(
         };
 
         let mut graph = build_graph(plan);
+
+        fn dfs(node: &StreamNode, depth: i32) {
+            let x = match &node.node_body {
+                None => "".to_string(),
+                Some(x) => x.to_string(),
+            };
+
+            println!("{}{} {}", " ".repeat(depth as usize), node.identity, x);
+
+            for input in &node.input {
+                dfs(input, depth + 1);
+            }
+            // dfs(&node.left, depth + 1);
+            // dfs(&node.right, depth + 1);
+            //    }
+        }
+
+        for f in graph.fragments.values() {
+            if let Some(x) = &f.node {
+                dfs(x, 0);
+            }
+        }
+
         graph.parallelism = session
             .config()
             .get_streaming_parallelism()

@@ -219,6 +219,7 @@ impl DdlService for DdlServiceImpl {
         println!("req {:#?}", req);
         let sink = req.get_sink()?.clone();
         let fragment_graph = req.get_fragment_graph()?.clone();
+        let replace_table = req.replace_table.clone();
 
         // validate connection before starting the DDL procedure
         if let Some(connection_id) = sink.connection_id {
@@ -230,14 +231,40 @@ impl DdlService for DdlServiceImpl {
 
         stream_job.set_id(id);
 
-        let version = self
-            .ddl_controller
-            .run_command(DdlCommand::CreateStreamingJob(
-                stream_job,
-                fragment_graph,
-                CreateType::Foreground,
-            ))
-            .await?;
+        let version = if let Some(req) = replace_table {
+            let source = req.source;
+            let sink_fragment_graph = req.fragment_graph.unwrap();
+            let table = req.table.unwrap();
+            // if let Some(OptionalAssociatedSourceId::AssociatedSourceId(source_id)) =
+            //     table.optional_associated_source_id
+            // {
+            //     let source = source.as_mut().unwrap();
+            //     let table_id = table.id;
+            //     fill_table_source(source, source_id, &mut table, table_id, &mut fragment_graph);
+            // }
+            let table_col_index_mapping =
+                ColIndexMapping::from_protobuf(&req.table_col_index_mapping.unwrap());
+            let sink_stream_job = StreamingJob::Table(source, table);
+
+            self.ddl_controller
+                .run_command(DdlCommand::CreateSinkIntoTable(
+                    (stream_job, fragment_graph, CreateType::Foreground),
+                    (
+                        sink_stream_job,
+                        sink_fragment_graph,
+                        table_col_index_mapping,
+                    ),
+                ))
+                .await?
+        } else {
+            self.ddl_controller
+                .run_command(DdlCommand::CreateStreamingJob(
+                    stream_job,
+                    fragment_graph,
+                    CreateType::Foreground,
+                ))
+                .await?
+        };
 
         Ok(Response::new(CreateSinkResponse {
             status: None,

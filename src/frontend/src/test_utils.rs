@@ -489,6 +489,18 @@ impl CatalogWriter for MockCatalogWriter {
     async fn alter_source_name(&self, _source_id: u32, _source_name: &str) -> Result<()> {
         unreachable!()
     }
+
+    async fn create_sink_into_table(
+        &self,
+        _sink: PbSink,
+        _sink_graph: StreamFragmentGraph,
+        _table_source: Option<PbSource>,
+        _table: PbTable,
+        _table_graph: StreamFragmentGraph,
+        _table_col_index_mapping: ColIndexMapping,
+    ) -> Result<()> {
+        todo!()
+    }
 }
 
 impl MockCatalogWriter {

@@ -27,8 +27,8 @@ use risingwave_pb::stream_plan::barrier::BarrierKind;
 use risingwave_pb::stream_plan::barrier_mutation::Mutation;
 use risingwave_pb::stream_plan::update_mutation::*;
 use risingwave_pb::stream_plan::{
-    AddMutation, Dispatcher, Dispatchers, PauseMutation, ResumeMutation, SourceChangeSplitMutation,
-    StopMutation, UpdateMutation,
+    AddMutation, BarrierMutation, CombinedMutation, Dispatcher, Dispatchers, PauseMutation,
+    ResumeMutation, SourceChangeSplitMutation, StopMutation, UpdateMutation,
 };
 use risingwave_pb::stream_service::{DropActorsRequest, WaitEpochCommitRequest};
 use risingwave_rpc_client::StreamClientPoolRef;
@@ -146,6 +146,19 @@ pub enum Command {
     /// `SourceSplitAssignment` generates Plain(Mutation::Splits) for pushing initialized splits or
     /// newly added splits.
     SourceSplitAssignment(SplitAssignment),
+
+    CreateSinkIntoTable {
+        sink_table_fragments: TableFragments,
+        sink_upstream_mview_actors: HashMap<TableId, Vec<ActorId>>,
+        sink_dispatchers: HashMap<ActorId, Vec<Dispatcher>>,
+        sink_definition: String,
+
+        table_old_table_fragments: TableFragments,
+        table_new_table_fragments: TableFragments,
+        table_merge_updates: Vec<MergeUpdate>,
+        table_dispatchers: HashMap<ActorId, Vec<Dispatcher>>,
+        table_init_split_assignment: SplitAssignment,
+    },
 }
 
 impl Command {
@@ -195,6 +208,10 @@ impl Command {
                 CommandChanges::Actor { to_add, to_remove }
             }
             Command::SourceSplitAssignment(_) => CommandChanges::None,
+            Command::CreateSinkIntoTable {
+                sink_table_fragments,
+                ..
+            } => CommandChanges::CreateTable(sink_table_fragments.table_id()),
         }
     }
 
@@ -514,6 +531,89 @@ impl CommandContext {
                 tracing::debug!("update mutation: {mutation:#?}");
                 Some(mutation)
             }
+
+            Command::CreateSinkIntoTable {
+                sink_table_fragments,
+                sink_upstream_mview_actors: _,
+                sink_dispatchers,
+                sink_definition: _,
+                table_old_table_fragments,
+                table_new_table_fragments: _,
+                table_merge_updates,
+                table_dispatchers,
+                table_init_split_assignment,
+            } => {
+                let add = {
+                    let actor_dispatchers = sink_dispatchers
+                        .iter()
+                        .map(|(&actor_id, dispatchers)| {
+                            (
+                                actor_id,
+                                Dispatchers {
+                                    dispatchers: dispatchers.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+                    let added_actors = sink_table_fragments.actor_ids();
+                    // let actor_splits = sink_split_assignment
+                    //     .values()
+                    //     .flat_map(build_actor_connector_splits)
+                    //     .collect();
+                    Some(Mutation::Add(AddMutation {
+                        actor_dispatchers,
+                        added_actors,
+                        actor_splits: HashMap::default(),
+                        // If the cluster is already paused, the new actors should be paused too.
+                        pause: self.current_paused_reason.is_some(),
+                    }))
+                }
+                .unwrap();
+
+                let update = {
+                    let dropped_actors = table_old_table_fragments.actor_ids();
+
+                    let actor_new_dispatchers = table_dispatchers
+                        .iter()
+                        .map(|(&actor_id, dispatchers)| {
+                            (
+                                actor_id,
+                                Dispatchers {
+                                    dispatchers: dispatchers.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+
+                    let actor_splits = table_init_split_assignment
+                        .values()
+                        .flat_map(build_actor_connector_splits)
+                        .collect();
+
+                    Some(Mutation::Update(UpdateMutation {
+                        actor_new_dispatchers,
+                        merge_update: table_merge_updates.clone(),
+                        dropped_actors,
+                        actor_splits,
+                        ..Default::default()
+                    }))
+                }
+                .unwrap();
+
+                let combianed = Mutation::Combined(CombinedMutation {
+                    mutations: vec![
+                        BarrierMutation {
+                            mutation: Some(add),
+                        },
+                        BarrierMutation {
+                            mutation: Some(update),
+                        },
+                    ],
+                });
+
+                Some(combianed)
+            }
+            _ => todo!(),
         };
 
         Ok(mutation)
@@ -785,6 +885,59 @@ impl CommandContext {
                         new_table_fragments,
                         merge_updates,
                         dispatchers,
+                    )
+                    .await?;
+            }
+            Command::CreateSinkIntoTable {
+                sink_table_fragments,
+                sink_upstream_mview_actors,
+                sink_dispatchers,
+                sink_definition: _,
+                table_old_table_fragments,
+                table_new_table_fragments,
+                table_merge_updates,
+                table_dispatchers,
+                table_init_split_assignment: _,
+            } => {
+                let mut dependent_table_actors =
+                    Vec::with_capacity(sink_upstream_mview_actors.len());
+                for (table_id, actors) in sink_upstream_mview_actors {
+                    let downstream_actors = sink_dispatchers
+                        .iter()
+                        .filter(|(upstream_actor_id, _)| actors.contains(upstream_actor_id))
+                        .map(|(&k, v)| (k, v.clone()))
+                        .collect();
+                    dependent_table_actors.push((*table_id, downstream_actors));
+                }
+                self.fragment_manager
+                    .post_create_table_fragments(
+                        &sink_table_fragments.table_id(),
+                        dependent_table_actors,
+                        HashMap::default(),
+                    )
+                    .await?;
+
+                // Extract the fragments that include source operators.
+                let source_fragments = sink_table_fragments.stream_source_fragments();
+
+                self.source_manager
+                    .apply_source_change(Some(source_fragments), None, None)
+                    .await;
+
+                let table_ids =
+                    HashSet::from_iter(std::iter::once(table_old_table_fragments.table_id()));
+
+                // Tell compute nodes to drop actors.
+                let node_actors = self.fragment_manager.table_node_actors(&table_ids).await?;
+                self.clean_up(node_actors).await?;
+
+                // Drop fragment info in meta store.
+                self.fragment_manager
+                    .post_replace_table(
+                        table_old_table_fragments,
+                        table_new_table_fragments,
+                        table_merge_updates,
+                        table_dispatchers,
                     )
                     .await?;
             }

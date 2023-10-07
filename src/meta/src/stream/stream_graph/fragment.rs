@@ -243,7 +243,7 @@ impl StreamFragmentEdge {
 #[derive(Default)]
 pub struct StreamFragmentGraph {
     /// stores all the fragments in the graph.
-    fragments: HashMap<GlobalFragmentId, BuildingFragment>,
+    pub fragments: HashMap<GlobalFragmentId, BuildingFragment>,
 
     /// stores edges between fragments: upstream => downstream.
     downstreams: HashMap<GlobalFragmentId, HashMap<GlobalFragmentId, StreamFragmentEdge>>,

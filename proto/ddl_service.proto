@@ -79,6 +79,7 @@ message AlterSourceResponse {
 message CreateSinkRequest {
   catalog.Sink sink = 1;
   stream_plan.StreamFragmentGraph fragment_graph = 2;
+  ReplaceTablePlanRequest replace_table = 3;
 }
 
 message CreateSinkResponse {

@@ -17,6 +17,7 @@ use pgwire::pg_response::{PgResponse, StatementType};
 use risingwave_common::error::{ErrorCode, Result};
 use risingwave_pb::catalog::{CreateType, PbTable};
 use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+use risingwave_pb::stream_plan::StreamNode;
 use risingwave_pb::user::grant_privilege::Action;
 use risingwave_sqlparser::ast::{EmitMode, Ident, ObjectName, Query};
 
@@ -114,6 +115,8 @@ pub fn gen_create_mv_plan(
     }
     let materialize =
         plan_root.gen_materialize_plan(table_name, definition, emit_on_window_close)?;
+
+    println!("mat {:#?}", materialize);
     let mut table = materialize.table().to_prost(schema_id, database_id);
     if session.config().get_create_compaction_group_for_mv() {
         table.properties.insert(
@@ -177,6 +180,30 @@ It only indicates the physical clustering of the data, which may improve the per
             gen_create_mv_plan(&session, context.into(), query, name, columns, emit_mode)?;
         let context = plan.plan_base().ctx.clone();
         let mut graph = build_graph(plan);
+        println!("graph {:#?}", graph);
+
+        fn dfs(node: &StreamNode, depth: i32) {
+            let x = match &node.node_body {
+                None => "".to_string(),
+                Some(x) => x.to_string(),
+            };
+
+            println!("{}{} {}", " ".repeat(depth as usize), node.identity, x);
+
+            for input in &node.input {
+                dfs(input, depth + 1);
+            }
+            // dfs(&node.left, depth + 1);
+            // dfs(&node.right, depth + 1);
+            //    }
+        }
+
+        for f in graph.fragments.values() {
+            if let Some(s) = &f.node {
+                dfs(s, 0);
+            }
+        }
+
         graph.parallelism = session
             .config()
             .get_streaming_parallelism()

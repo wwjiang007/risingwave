@@ -240,13 +240,14 @@ impl DispatchExecutorInner {
                 }
             }
             Mutation::Combined(v) => match &v[..] {
-                [Mutation::Add { .. }, Mutation::Update { .. }] => {
+                [Mutation::Add { .. }, Mutation::Update { .. }] | [Mutation::Add { .. }] => {
                     for mutation in v {
                         self.pre_mutate_dispatchers_inner(mutation, depth + 1)?;
                     }
                 }
                 _ => unreachable!(),
             },
+
             _ => {}
         };
 
@@ -304,7 +305,7 @@ impl DispatchExecutorInner {
                 }
             }
             Mutation::Combined(v) => match &v[..] {
-                [Mutation::Add { .. }, Mutation::Update { .. }] => {
+                [Mutation::Add { .. }, Mutation::Update { .. }] | [Mutation::Add { .. }] => {
                     for mutation in v {
                         self.post_mutate_dispatchers_inner(mutation, depth + 1)?;
                     }

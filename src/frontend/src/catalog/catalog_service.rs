@@ -99,6 +99,15 @@ pub trait CatalogWriter: Send + Sync {
     async fn create_source(&self, source: PbSource) -> Result<()>;
 
     async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()>;
+    async fn create_sink_into_table(
+        &self,
+        sink: PbSink,
+        sink_graph: StreamFragmentGraph,
+        table_source: Option<PbSource>,
+        table: PbTable,
+        table_graph: StreamFragmentGraph,
+        table_col_index_mapping: ColIndexMapping,
+    ) -> Result<()>;
 
     async fn create_function(&self, function: PbFunction) -> Result<()>;
 
@@ -379,6 +388,29 @@ impl CatalogWriter for CatalogWriterImpl {
         let version = self
             .meta_client
             .alter_relation_name(Relation::SourceId(source_id), source_name)
+            .await?;
+        self.wait_version(version).await
+    }
+
+    async fn create_sink_into_table(
+        &self,
+        sink: PbSink,
+        sink_graph: StreamFragmentGraph,
+        table_source: Option<PbSource>,
+        table: PbTable,
+        table_graph: StreamFragmentGraph,
+        table_col_index_mapping: ColIndexMapping,
+    ) -> Result<()> {
+        let (_id, version) = self
+            .meta_client
+            .create_sink_into_table(
+                sink,
+                sink_graph,
+                table_source,
+                table,
+                table_graph,
+                table_col_index_mapping,
+            )
             .await?;
         self.wait_version(version).await
     }
