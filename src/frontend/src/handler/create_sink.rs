@@ -25,6 +25,7 @@ use risingwave_connector::sink::catalog::{SinkCatalog, SinkFormatDesc};
 use risingwave_connector::sink::{
     CONNECTOR_TYPE_KEY, SINK_TYPE_OPTION, SINK_USER_FORCE_APPEND_ONLY_OPTION,
 };
+use risingwave_pb::ddl_service::ReplaceTableChange;
 use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
 use risingwave_sqlparser::ast::{
     CreateSink, CreateSinkStatement, EmitMode, Encode, Format, ObjectName, Query, Select,
@@ -37,6 +38,7 @@ use crate::binder::Binder;
 use crate::handler::privilege::resolve_query_privileges;
 use crate::handler::HandlerArgs;
 use crate::optimizer::plan_node::Explain;
+use crate::optimizer::plan_node::PlanNodeType::StreamTableScan;
 use crate::optimizer::{OptimizerContext, OptimizerContextRef, PlanRef, RelationCollectorVisitor};
 use crate::scheduler::streaming_manager::CreatingStreamingJobInfo;
 use crate::session::SessionImpl;
@@ -131,7 +133,7 @@ pub fn gen_sink_plan(
         Some(f) => {
             validate_compatibility(connector, &f)?;
             Some(bind_sink_format_desc(f)?)
-        },
+        }
         None => match with_options.get(SINK_TYPE_OPTION) {
             // Case B: old syntax `type = '...'`
             Some(t) => SinkFormatDesc::from_legacy_type(connector, t)?.map(|mut f| {
@@ -193,6 +195,8 @@ pub async fn handle_create_sink(
 
     session.check_relation_name_duplicated(stmt.sink_name.clone())?;
 
+    let target_table = stmt.into_table_name.clone();
+
     let (sink, graph) = {
         let context = Rc::new(OptimizerContext::from_handler_args(handle_args));
         let (query, plan, sink) = gen_sink_plan(&session, context.clone(), stmt)?;
@@ -211,6 +215,170 @@ pub async fn handle_create_sink(
         (sink, graph)
     };
 
+    let mut target_table_change = None;
+    if let Some(table_name) = target_table {
+        use anyhow::Context;
+        use itertools::Itertools;
+        use pgwire::pg_response::{PgResponse, StatementType};
+        use risingwave_common::error::{ErrorCode, Result, RwError};
+        use risingwave_common::util::column_index_mapping::ColIndexMapping;
+        use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
+        use risingwave_pb::catalog::Table;
+        use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+        use risingwave_pb::stream_plan::StreamFragmentGraph;
+        use risingwave_sqlparser::ast::{
+            AlterTableOperation, ColumnOption, Encode, ObjectName, SourceSchemaV2, Statement,
+        };
+        use risingwave_sqlparser::parser::Parser;
+
+        use super::create_source::get_json_schema_location;
+        use super::create_table::{gen_create_table_plan, ColumnIdGenerator};
+        use super::{HandlerArgs, RwPgResponse};
+        use crate::catalog::root_catalog::SchemaPath;
+        use crate::catalog::table_catalog::TableType;
+        use crate::handler::create_table::gen_create_table_plan_with_source;
+        use crate::{build_graph, Binder, OptimizerContext, TableCatalog};
+
+        let db_name = session.database();
+        let (schema_name, real_table_name) =
+            Binder::resolve_schema_qualified_name(db_name, table_name.clone())?;
+        let search_path = session.config().get_search_path();
+        let user_name = &session.auth_context().user_name;
+
+        let schema_path = SchemaPath::new(schema_name.as_deref(), &search_path, user_name);
+
+        let original_catalog = {
+            let reader = session.env().catalog_reader().read_guard();
+            let (table, schema_name) =
+                reader.get_table_by_name(db_name, schema_path, &real_table_name)?;
+
+            match table.table_type() {
+                TableType::Table => {}
+
+                _ => Err(ErrorCode::InvalidInputSyntax(format!(
+                    "\"{table_name}\" is not a table or cannot be altered"
+                )))?,
+            }
+
+            session.check_privilege_for_drop_alter(schema_name, &**table)?;
+
+            table.clone()
+        };
+
+        // TODO(yuhao): alter table with generated columns.
+        if original_catalog.has_generated_column() {
+            return Err(RwError::from(ErrorCode::BindError(
+                "Alter a table with generated column has not been implemented.".to_string(),
+            )));
+        }
+
+        // Retrieve the original table definition and parse it to AST.
+        let [mut definition]: [_; 1] = Parser::parse_sql(&original_catalog.definition)
+            .context("unable to parse original table definition")?
+            .try_into()
+            .unwrap();
+        let Statement::CreateTable {
+            columns,
+            source_schema,
+            ..
+        } = &mut definition
+        else {
+            panic!("unexpected statement: {:?}", definition);
+        };
+        let source_schema = source_schema
+            .clone()
+            .map(|source_schema| source_schema.into_source_schema_v2().0);
+
+        // Create handler args as if we're creating a new table with the altered definition.
+        let handler_args = HandlerArgs::new(session.clone(), &definition, "")?;
+        let col_id_gen = ColumnIdGenerator::new_alter(&original_catalog);
+        let Statement::CreateTable {
+            columns,
+            constraints,
+            source_watermarks,
+            append_only,
+            ..
+        } = definition
+        else {
+            panic!("unexpected statement type: {:?}", definition);
+        };
+
+        let (graph, table, source) = {
+            let context = OptimizerContext::from_handler_args(handler_args);
+            let (plan, source, table) = match source_schema {
+                Some(source_schema) => {
+                    gen_create_table_plan_with_source(
+                        context,
+                        table_name,
+                        columns,
+                        constraints,
+                        source_schema,
+                        source_watermarks,
+                        col_id_gen,
+                        append_only,
+                    )
+                    .await?
+                }
+                None => gen_create_table_plan(
+                    context,
+                    table_name,
+                    columns,
+                    constraints,
+                    col_id_gen,
+                    source_watermarks,
+                    append_only,
+                )?,
+            };
+
+            // TODO: avoid this backward conversion.
+            if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
+                Err(ErrorCode::InvalidInputSyntax(
+                    "alter primary key of table is not supported".to_owned(),
+                ))?
+            }
+
+            let graph = StreamFragmentGraph {
+                parallelism: session
+                    .config()
+                    .get_streaming_parallelism()
+                    .map(|parallelism| Parallelism { parallelism }),
+                ..build_graph(plan)
+            };
+
+            // Fill the original table ID.
+            let table = Table {
+                id: original_catalog.id().table_id(),
+                optional_associated_source_id: original_catalog.associated_source_id().map(
+                    |source_id| OptionalAssociatedSourceId::AssociatedSourceId(source_id.into()),
+                ),
+                ..table
+            };
+
+            (graph, table, source)
+        };
+
+        // Calculate the mapping from the original columns to the new columns.
+        let col_index_mapping = ColIndexMapping::with_target_size(
+            original_catalog
+                .columns()
+                .iter()
+                .map(|old_c| {
+                    table.columns.iter().position(|new_c| {
+                        new_c.get_column_desc().unwrap().column_id == old_c.column_id().get_id()
+                    })
+                })
+                .collect(),
+            table.columns.len(),
+        );
+
+        target_table_change = Some(ReplaceTableChange {
+            source,
+            table: Some(table),
+            fragment_graph: Some(graph),
+            table_col_index_mapping: Some(col_index_mapping.to_protobuf()),
+        });
+    }
+
     let _job_guard =
         session
             .env()
@@ -223,7 +391,9 @@ pub async fn handle_create_sink(
             ));
 
     let catalog_writer = session.catalog_writer()?;
-    catalog_writer.create_sink(sink.to_proto(), graph).await?;
+    catalog_writer
+        .create_sink(sink.to_proto(), graph, target_table_change)
+        .await?;
 
     Ok(PgResponse::empty_result(StatementType::CREATE_SINK))
 }
@@ -240,7 +410,7 @@ fn bind_sink_format_desc(value: SinkSchema) -> Result<SinkFormatDesc> {
         F::Upsert => SinkFormat::Upsert,
         F::Debezium => SinkFormat::Debezium,
         f @ (F::Native | F::DebeziumMongo | F::Maxwell | F::Canal) => {
-            return Err(ErrorCode::BindError(format!("sink format unsupported: {f}")).into())
+            return Err(ErrorCode::BindError(format!("sink format unsupported: {f}")).into());
         }
     };
     let encode = match value.row_encode {
@@ -248,7 +418,7 @@ fn bind_sink_format_desc(value: SinkSchema) -> Result<SinkFormatDesc> {
         E::Protobuf => SinkEncode::Protobuf,
         E::Avro => SinkEncode::Avro,
         e @ (E::Native | E::Csv | E::Bytes) => {
-            return Err(ErrorCode::BindError(format!("sink encode unsupported: {e}")).into())
+            return Err(ErrorCode::BindError(format!("sink encode unsupported: {e}")).into());
         }
     };
     let options = WithOptions::try_from(value.row_options.as_slice())?.into_inner();
@@ -285,6 +455,7 @@ static CONNECTORS_COMPATIBLE_FORMATS: LazyLock<HashMap<String, HashMap<Format, V
                 ),
         ))
     });
+
 pub fn validate_compatibility(connector: &str, format_desc: &SinkSchema) -> Result<()> {
     let compatible_formats = CONNECTORS_COMPATIBLE_FORMATS
         .get(connector)

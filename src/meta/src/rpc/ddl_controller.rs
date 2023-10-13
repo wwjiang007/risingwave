@@ -26,7 +26,7 @@ use risingwave_pb::catalog::{
     connection, Connection, CreateType, Database, Function, Schema, Source, Table, View,
 };
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
-use risingwave_pb::ddl_service::DdlProgress;
+use risingwave_pb::ddl_service::{DdlProgress, ReplaceTableChange};
 use risingwave_pb::stream_plan::StreamFragmentGraph as StreamFragmentGraphProto;
 use tokio::sync::Semaphore;
 use tracing::log::warn;
@@ -83,6 +83,12 @@ impl StreamingJobId {
     }
 }
 
+pub struct ReplaceTableInfo {
+    pub(crate) streaming_job: StreamingJob,
+    pub(crate) fragment_graph: StreamFragmentGraphProto,
+    pub(crate) col_index_mapping: ColIndexMapping,
+}
+
 pub enum DdlCommand {
     CreateDatabase(Database),
     DropDatabase(DatabaseId),
@@ -94,7 +100,12 @@ pub enum DdlCommand {
     DropFunction(FunctionId),
     CreateView(View),
     DropView(ViewId, DropMode),
-    CreateStreamingJob(StreamingJob, StreamFragmentGraphProto, CreateType),
+    CreateStreamingJob(
+        StreamingJob,
+        StreamFragmentGraphProto,
+        CreateType,
+        Option<ReplaceTableInfo>,
+    ),
     DropStreamingJob(StreamingJobId, DropMode),
     ReplaceTable(StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
     AlterRelationName(Relation, String),
@@ -237,9 +248,19 @@ impl DdlController {
                 DdlCommand::DropView(view_id, drop_mode) => {
                     ctrl.drop_view(view_id, drop_mode).await
                 }
-                DdlCommand::CreateStreamingJob(stream_job, fragment_graph, create_type) => {
-                    ctrl.create_streaming_job(stream_job, fragment_graph, create_type)
-                        .await
+                DdlCommand::CreateStreamingJob(
+                    stream_job,
+                    fragment_graph,
+                    create_type,
+                    target_replace_info,
+                ) => {
+                    ctrl.create_streaming_job(
+                        stream_job,
+                        fragment_graph,
+                        create_type,
+                        target_replace_info,
+                    )
+                    .await
                 }
                 DdlCommand::DropStreamingJob(job_id, drop_mode) => {
                     ctrl.drop_streaming_job(job_id, drop_mode).await
@@ -413,6 +434,7 @@ impl DdlController {
         mut stream_job: StreamingJob,
         fragment_graph: StreamFragmentGraphProto,
         create_type: CreateType,
+        target_table_replace_info: Option<ReplaceTableInfo>,
     ) -> MetaResult<NotificationVersion> {
         tracing::debug!(
             id = stream_job.id(),
@@ -434,6 +456,36 @@ impl DdlController {
             .prepare_stream_job(&mut stream_job, fragment_graph)
             .await?;
 
+        let mut replace_table_info = None;
+        if let Some(ReplaceTableInfo {
+            streaming_job: mut stream_job,
+            fragment_graph,
+            col_index_mapping: table_col_index_mapping,
+        }) = target_table_replace_info
+        {
+            let fragment_graph = self
+                .prepare_replace_table(&mut stream_job, fragment_graph)
+                .await?;
+
+            // let result = try {
+            let (replace_table_ctx, replace_table_table_fragments) = self
+                .build_replace_table(
+                    env.clone(),
+                    &stream_job,
+                    fragment_graph,
+                    table_col_index_mapping.clone(),
+                )
+                .await?;
+
+            replace_table_info =
+                Some((stream_job, replace_table_table_fragments, replace_table_ctx));
+
+            // self.stream_manager
+            //     .replace_table(table_fragments, ctx)
+            //     .await?;
+            // };
+        }
+
         // Update the corresponding 'initiated_at' field.
         stream_job.mark_initialized();
 
@@ -454,6 +506,8 @@ impl DdlController {
                 StreamingJob::Sink(ref sink) => {
                     // Validate the sink on the connector node.
                     validate_sink(sink).await?;
+
+                    // maybe do sth for sink into table
                 }
                 _ => {}
             }
@@ -470,8 +524,14 @@ impl DdlController {
 
         match create_type {
             CreateType::Foreground | CreateType::Unspecified => {
-                self.create_streaming_job_inner(stream_job, table_fragments, ctx, internal_tables)
-                    .await
+                self.create_streaming_job_inner(
+                    stream_job,
+                    table_fragments,
+                    ctx,
+                    internal_tables,
+                    replace_table_info,
+                )
+                .await
             }
             CreateType::Background => {
                 let ctrl = self.clone();
@@ -483,6 +543,7 @@ impl DdlController {
                             table_fragments,
                             ctx,
                             internal_tables,
+                            replace_table_info,
                         )
                         .await;
                     match result {
@@ -507,12 +568,21 @@ impl DdlController {
         table_fragments: TableFragments,
         ctx: CreateStreamingJobContext,
         internal_tables: Vec<Table>,
+        replace_table_info: Option<(StreamingJob, TableFragments, ReplaceTableContext)>,
     ) -> MetaResult<NotificationVersion> {
         let job_id = stream_job.id();
         tracing::debug!(id = job_id, "creating stream job");
+
+        let (replace_table_stream_job, info) = if let Some((stream_job, f, r)) = replace_table_info
+        {
+            (Some(stream_job), Some((f, r)))
+        } else {
+            (None, None)
+        };
+
         let result = self
             .stream_manager
-            .create_streaming_job(table_fragments, ctx)
+            .create_streaming_job(table_fragments, ctx, info)
             .await;
         if let Err(e) = result {
             match stream_job.create_type() {
@@ -523,6 +593,10 @@ impl DdlController {
                 }
                 _ => {
                     self.cancel_stream_job(&stream_job, internal_tables).await?;
+
+                    if let Some(stream_job) = replace_table_stream_job {
+                        let _ = self.cancel_replace_table(&stream_job).await;
+                    }
                 }
             }
             return Err(e);

@@ -24,7 +24,9 @@ use risingwave_pb::catalog::{
     PbCreateType, PbDatabase, PbFunction, PbIndex, PbSchema, PbSink, PbSource, PbTable, PbView,
 };
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
-use risingwave_pb::ddl_service::create_connection_request;
+use risingwave_pb::ddl_service::{
+    create_connection_request, PbReplaceTableChange, ReplaceTableChange,
+};
 use risingwave_pb::stream_plan::StreamFragmentGraph;
 use risingwave_rpc_client::MetaClient;
 use tokio::sync::watch::Receiver;
@@ -98,7 +100,12 @@ pub trait CatalogWriter: Send + Sync {
 
     async fn create_source(&self, source: PbSource) -> Result<()>;
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()>;
+    async fn create_sink(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        target_table_change: Option<PbReplaceTableChange>,
+    ) -> Result<()>;
 
     async fn create_function(&self, function: PbFunction) -> Result<()>;
 
@@ -251,8 +258,8 @@ impl CatalogWriter for CatalogWriterImpl {
         self.wait_version(version).await
     }
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()> {
-        let (_id, version) = self.meta_client.create_sink(sink, graph).await?;
+    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph, target_table_change: Option<ReplaceTableChange>) -> Result<()> {
+        let (_id, version) = self.meta_client.create_sink(sink, graph, target_table_change).await?;
         self.wait_version(version).await
     }
 

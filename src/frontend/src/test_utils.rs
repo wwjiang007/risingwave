@@ -34,7 +34,7 @@ use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
 use risingwave_pb::catalog::{
     PbDatabase, PbFunction, PbIndex, PbSchema, PbSink, PbSource, PbTable, PbView, Table,
 };
-use risingwave_pb::ddl_service::{create_connection_request, DdlProgress};
+use risingwave_pb::ddl_service::{create_connection_request, DdlProgress, ReplaceTableChange};
 use risingwave_pb::hummock::write_limits::WriteLimit;
 use risingwave_pb::hummock::{
     BranchedObject, CompactionGroupInfo, HummockSnapshot, HummockVersion, HummockVersionDelta,
@@ -279,7 +279,12 @@ impl CatalogWriter for MockCatalogWriter {
         self.create_source_inner(source).map(|_| ())
     }
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()> {
+    async fn create_sink(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        _target_table_change: Option<ReplaceTableChange>,
+    ) -> Result<()> {
         self.create_sink_inner(sink, graph)
     }
 

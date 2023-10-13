@@ -370,10 +370,12 @@ impl MetaClient {
         &self,
         sink: PbSink,
         graph: StreamFragmentGraph,
+        target_table_change: Option<ReplaceTableChange>,
     ) -> Result<(u32, CatalogVersion)> {
         let request = CreateSinkRequest {
             sink: Some(sink),
             fragment_graph: Some(graph),
+            target_table_change,
         };
 
         let resp = self.inner.create_sink(request).await?;

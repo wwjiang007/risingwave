@@ -32,7 +32,7 @@ use uuid::Uuid;
 use super::Locations;
 use crate::barrier::{BarrierScheduler, Command};
 use crate::hummock::HummockManagerRef;
-use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv};
+use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv, StreamingJob};
 use crate::model::{ActorId, TableFragments};
 use crate::stream::SourceManagerRef;
 use crate::{MetaError, MetaResult};
@@ -226,6 +226,7 @@ impl GlobalStreamManager {
         self: &Arc<Self>,
         table_fragments: TableFragments,
         ctx: CreateStreamingJobContext,
+        replace_table_info: Option<(TableFragments, ReplaceTableContext)>,
     ) -> MetaResult<()> {
         let table_id = table_fragments.table_id();
         let (sender, mut receiver) = tokio::sync::mpsc::channel(10);
@@ -236,7 +237,12 @@ impl GlobalStreamManager {
         let fut = async move {
             let mut revert_funcs = vec![];
             let res = stream_manager
-                .create_streaming_job_impl(&mut revert_funcs, table_fragments, ctx)
+                .create_streaming_job_impl(
+                    &mut revert_funcs,
+                    table_fragments,
+                    ctx,
+                    replace_table_info,
+                )
                 .await;
             match res {
                 Ok(_) => {
@@ -421,7 +427,66 @@ impl GlobalStreamManager {
             internal_tables,
             create_type,
         }: CreateStreamingJobContext,
+        replace_table_info: Option<(TableFragments, ReplaceTableContext)>,
     ) -> MetaResult<()> {
+        let mut replace_table_command = None;
+        let mut replace_table_id = None;
+
+        if let Some((
+            table_fragments,
+            ReplaceTableContext {
+                old_table_fragments,
+                merge_updates,
+                dispatchers,
+                building_locations,
+                existing_locations,
+                table_properties,
+            },
+        )) = replace_table_info
+        {
+            self.build_actors(&table_fragments, &building_locations, &existing_locations)
+                .await?;
+
+            // Add table fragments to meta store with state: `State::Initial`.
+            self.fragment_manager
+                .start_create_table_fragments(table_fragments.clone())
+                .await?;
+
+            let dummy_table_id = table_fragments.table_id();
+
+            let init_split_assignment = self
+                .source_manager
+                .pre_allocate_splits(&dummy_table_id)
+                .await?;
+
+            replace_table_command = Some(Command::ReplaceTable {
+                old_table_fragments,
+                new_table_fragments: table_fragments,
+                merge_updates,
+                dispatchers,
+                init_split_assignment,
+            });
+
+            replace_table_id = Some(dummy_table_id);
+
+            // if let Err(err) = self
+            //     .barrier_scheduler
+            //     .run_config_change_command_with_pause(Command::ReplaceTable {
+            //         old_table_fragments,
+            //         new_table_fragments: table_fragments,
+            //         merge_updates,
+            //         dispatchers,
+            //         init_split_assignment,
+            //     })
+            //     .await
+            // {
+            //     self.fragment_manager
+            //         .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(dummy_table_id)))
+            //         .await?;
+            //     return Err(err);
+            // }
+        }
+
         // Register to compaction group beforehand.
         let hummock_manager_ref = self.hummock_manager.clone();
         let registered_table_ids = hummock_manager_ref
@@ -470,6 +535,11 @@ impl GlobalStreamManager {
                 self.fragment_manager
                     .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(table_id)))
                     .await?;
+                if let Some(dummy_table_id) = replace_table_id {
+                    self.fragment_manager
+                        .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(dummy_table_id)))
+                        .await?;
+                }
             }
             return Err(err);
         }
