@@ -131,7 +131,7 @@ pub trait CatalogWriter: Send + Sync {
 
     async fn drop_source(&self, source_id: u32, cascade: bool) -> Result<()>;
 
-    async fn drop_sink(&self, sink_id: u32, cascade: bool) -> Result<()>;
+    async fn drop_sink(&self, sink_id: u32, cascade: bool, target_table_change: Option<PbReplaceTableChange>) -> Result<()>;
 
     async fn drop_database(&self, database_id: u32) -> Result<()>;
 
@@ -258,8 +258,16 @@ impl CatalogWriter for CatalogWriterImpl {
         self.wait_version(version).await
     }
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph, target_table_change: Option<ReplaceTableChange>) -> Result<()> {
-        let (_id, version) = self.meta_client.create_sink(sink, graph, target_table_change).await?;
+    async fn create_sink(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        target_table_change: Option<ReplaceTableChange>,
+    ) -> Result<()> {
+        let (_id, version) = self
+            .meta_client
+            .create_sink(sink, graph, target_table_change)
+            .await?;
         self.wait_version(version).await
     }
 
@@ -320,8 +328,8 @@ impl CatalogWriter for CatalogWriterImpl {
         self.wait_version(version).await
     }
 
-    async fn drop_sink(&self, sink_id: u32, cascade: bool) -> Result<()> {
-        let version = self.meta_client.drop_sink(sink_id, cascade).await?;
+    async fn drop_sink(&self, sink_id: u32, cascade: bool, target_table_change: Option<ReplaceTableChange>) -> Result<()> {
+        let version = self.meta_client.drop_sink(sink_id, cascade, target_table_change).await?;
         self.wait_version(version).await
     }
 

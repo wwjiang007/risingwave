@@ -493,6 +493,24 @@ impl CompleteStreamFragmentGraph {
         }
     }
 
+    pub fn with_upstreams_and_downstreams(
+        graph: StreamFragmentGraph,
+        upstream_mview_fragments: HashMap<TableId, Fragment>,
+        original_table_fragment_id: FragmentId,
+        downstream_fragments: Vec<(DispatchStrategy, Fragment)>,
+    ) -> MetaResult<Self> {
+        Self::build_helper(
+            graph,
+            Some(FragmentGraphUpstreamContext {
+                upstream_mview_fragments,
+            }),
+            Some(FragmentGraphDownstreamContext {
+                original_table_fragment_id,
+                downstream_fragments,
+            }),
+        )
+    }
+
     /// Create a new [`CompleteStreamFragmentGraph`] for MV on MV, with the upstream existing
     /// `Materialize` fragments.
     pub fn with_upstreams(
@@ -604,6 +622,10 @@ impl CompleteStreamFragmentGraph {
                     .into_values()
                     .map(|f| (GlobalFragmentId::new(f.fragment_id), f)),
             );
+
+            println!("extra down {:#?}", extra_downstreams);
+            println!("extra up {:#?}", extra_upstreams);
+            println!("existing {:#?}", existing_fragments.keys().collect_vec());
         }
 
         if let Some(FragmentGraphDownstreamContext {

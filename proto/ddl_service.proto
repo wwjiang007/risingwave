@@ -101,6 +101,7 @@ message CreateSinkResponse {
 message DropSinkRequest {
   uint32 sink_id = 1;
   bool cascade = 2;
+  optional ReplaceTableChange target_table_change = 3;
 }
 
 message DropSinkResponse {

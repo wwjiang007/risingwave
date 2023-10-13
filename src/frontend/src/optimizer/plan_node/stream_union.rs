@@ -24,6 +24,7 @@ use super::{generic, ExprRewritable, PlanRef};
 use crate::optimizer::plan_node::generic::GenericPlanNode;
 use crate::optimizer::plan_node::stream::StreamPlanRef;
 use crate::optimizer::plan_node::{PlanBase, PlanTreeNode, StreamNode};
+use crate::optimizer::property::Distribution;
 use crate::stream_fragmenter::BuildFragmentGraphState;
 
 /// `StreamUnion` implements [`super::LogicalUnion`]
@@ -39,11 +40,11 @@ impl StreamUnion {
         let dist = inputs[0].distribution().clone();
 
         // assert!(inputs.iter().all(|input| *input.distribution() == dist));
-        Self::new_with_dist(logical, dist)
+        Self::new_with_dist(core, dist)
     }
 
-    pub fn new_with_dist(logical: Union<PlanRef>, dist: Distribution) -> StreamUnion {
-        let inputs = &logical.inputs;
+    pub fn new_with_dist(core: generic::Union<PlanRef>, dist: Distribution) -> StreamUnion {
+        let inputs = &core.inputs;
         for input in inputs {
             println!(
                 "{} -> {}",

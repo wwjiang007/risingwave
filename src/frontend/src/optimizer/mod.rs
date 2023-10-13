@@ -53,7 +53,6 @@ use risingwave_common::util::column_index_mapping::ColIndexMapping;
 use risingwave_common::util::iter_util::ZipEqDebug;
 use risingwave_connector::sink::catalog::SinkFormatDesc;
 use risingwave_pb::catalog::WatermarkDesc;
-use risingwave_sqlparser::ast::ObjectName;
 
 use self::heuristic_optimizer::ApplyOrder;
 use self::plan_node::{
@@ -444,6 +443,7 @@ impl PlanRoot {
         watermark_descs: Vec<WatermarkDesc>,
         version: Option<TableVersion>,
         with_external_source: bool,
+        with_external_sinks: i32,
     ) -> Result<StreamMaterialize> {
         let stream_plan = self.gen_optimized_stream_plan(false)?;
 
@@ -516,10 +516,11 @@ impl PlanRoot {
 
         let column_descs = columns
             .iter()
-            .filter_map(|c| (!c.is_generated()).then(|| c.column_desc.clone()))
+            .filter(|&c| (!c.is_generated()))
+            .map(|c| c.column_desc.clone())
             .collect();
 
-        let mut stream_plan = if with_external_source {
+        let mut union_inputs = if with_external_source {
             let mut external_source_node = stream_plan;
             external_source_node = inject_project_if_needed(&columns, external_source_node)?;
             external_source_node = match kind {
@@ -534,7 +535,6 @@ impl PlanRoot {
                     StreamExchange::new_no_shuffle(external_source_node).into()
                 }
             };
-
 
             let dummy_source_node = LogicalSource::new(
                 None,
@@ -555,14 +555,8 @@ impl PlanRoot {
                 column_descs,
             )?;
 
-            StreamUnion::new(Union {
-                all: true,
-                inputs: vec![external_source_node, dml_node],
-                source_col: None,
-            })
-            .into()
+            vec![external_source_node, dml_node]
         } else {
-
             let dml_node = inject_dml_node(
                 &columns,
                 append_only,
@@ -572,14 +566,30 @@ impl PlanRoot {
                 column_descs,
             )?;
 
-
-            StreamUnion::new(Union {
-                all: true,
-                inputs: vec![dml_node],
-                source_col: None,
-            })
-            .into()
+            vec![dml_node]
         };
+
+        for _ in 0..with_external_sinks {
+            println!("pushing ");
+            let dummy_source_node = LogicalSource::new(
+                None,
+                columns.clone(),
+                row_id_index,
+                false,
+                true,
+                context.clone(),
+            )
+            .and_then(|s| s.to_stream(&mut ToStreamContext::new(false)))?;
+
+            union_inputs.push(dummy_source_node);
+        }
+
+        let mut stream_plan = StreamUnion::new(Union {
+            all: true,
+            inputs: union_inputs,
+            source_col: None,
+        })
+        .into();
 
         // Add WatermarkFilter node.
         if !watermark_descs.is_empty() {

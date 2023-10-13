@@ -29,6 +29,7 @@ pub mod nats;
 pub mod pulsar;
 pub mod redis;
 pub mod remote;
+pub mod table;
 pub mod test_sink;
 pub mod utils;
 pub mod writer;
@@ -79,7 +80,8 @@ macro_rules! for_all_sinks {
                 { ElasticSearch, $crate::sink::remote::ElasticSearchSink },
                 { Cassandra, $crate::sink::remote::CassandraSink },
                 { Doris, $crate::sink::doris::DorisSink },
-                { Test, $crate::sink::test_sink::TestSink }
+                { Test, $crate::sink::test_sink::TestSink },
+                { Table, $crate::sink::table::TableSink }
             }
             $(,$arg)*
         }

@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
 use maplit::{convert_args, hashmap};
@@ -25,26 +25,31 @@ use risingwave_connector::sink::catalog::{SinkCatalog, SinkFormatDesc};
 use risingwave_connector::sink::{
     CONNECTOR_TYPE_KEY, SINK_TYPE_OPTION, SINK_USER_FORCE_APPEND_ONLY_OPTION,
 };
+use risingwave_pb::catalog::{PbSource, Table};
 use risingwave_pb::ddl_service::ReplaceTableChange;
 use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+use risingwave_pb::stream_plan::stream_node::NodeBody;
+use risingwave_pb::stream_plan::stream_node::NodeBody::Merge;
+use risingwave_pb::stream_plan::{DispatcherType, MergeNode, StreamFragmentGraph, StreamNode};
 use risingwave_sqlparser::ast::{
-    CreateSink, CreateSinkStatement, EmitMode, Encode, Format, ObjectName, Query, Select,
-    SelectItem, SetExpr, SinkSchema, TableFactor, TableWithJoins,
+    ColumnDef, CreateSink, CreateSinkStatement, EmitMode, Encode, Format, ObjectName, Query,
+    Select, SelectItem, SetExpr, SinkSchema, SourceSchemaV2, SourceWatermark, TableConstraint,
+    TableFactor, TableWithJoins,
 };
 
 use super::create_mv::get_column_names;
 use super::RwPgResponse;
 use crate::binder::Binder;
+use crate::handler::create_table::ColumnIdGenerator;
 use crate::handler::privilege::resolve_query_privileges;
 use crate::handler::HandlerArgs;
 use crate::optimizer::plan_node::Explain;
-use crate::optimizer::plan_node::PlanNodeType::StreamTableScan;
 use crate::optimizer::{OptimizerContext, OptimizerContextRef, PlanRef, RelationCollectorVisitor};
 use crate::scheduler::streaming_manager::CreatingStreamingJobInfo;
 use crate::session::SessionImpl;
 use crate::stream_fragmenter::build_graph;
 use crate::utils::resolve_privatelink_in_with_option;
-use crate::{Planner, WithOptions};
+use crate::{Planner, TableCatalog, WithOptions};
 
 pub fn gen_sink_query_from_name(from_name: ObjectName) -> Result<Query> {
     let table_factor = TableFactor::Table {
@@ -218,26 +223,16 @@ pub async fn handle_create_sink(
     let mut target_table_change = None;
     if let Some(table_name) = target_table {
         use anyhow::Context;
-        use itertools::Itertools;
-        use pgwire::pg_response::{PgResponse, StatementType};
-        use risingwave_common::error::{ErrorCode, Result, RwError};
+        use risingwave_common::error::{ErrorCode, RwError};
         use risingwave_common::util::column_index_mapping::ColIndexMapping;
-        use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
-        use risingwave_pb::catalog::Table;
-        use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
-        use risingwave_pb::stream_plan::StreamFragmentGraph;
-        use risingwave_sqlparser::ast::{
-            AlterTableOperation, ColumnOption, Encode, ObjectName, SourceSchemaV2, Statement,
-        };
+        use risingwave_sqlparser::ast::Statement;
         use risingwave_sqlparser::parser::Parser;
 
-        use super::create_source::get_json_schema_location;
-        use super::create_table::{gen_create_table_plan, ColumnIdGenerator};
-        use super::{HandlerArgs, RwPgResponse};
+        use super::create_table::ColumnIdGenerator;
+        use super::HandlerArgs;
         use crate::catalog::root_catalog::SchemaPath;
         use crate::catalog::table_catalog::TableType;
-        use crate::handler::create_table::gen_create_table_plan_with_source;
-        use crate::{build_graph, Binder, OptimizerContext, TableCatalog};
+        use crate::Binder;
 
         let db_name = session.database();
         let (schema_name, real_table_name) =
@@ -277,12 +272,7 @@ pub async fn handle_create_sink(
             .context("unable to parse original table definition")?
             .try_into()
             .unwrap();
-        let Statement::CreateTable {
-            columns,
-            source_schema,
-            ..
-        } = &mut definition
-        else {
+        let Statement::CreateTable { source_schema, .. } = &mut definition else {
             panic!("unexpected statement: {:?}", definition);
         };
         let source_schema = source_schema
@@ -303,59 +293,51 @@ pub async fn handle_create_sink(
             panic!("unexpected statement type: {:?}", definition);
         };
 
-        let (graph, table, source) = {
-            let context = OptimizerContext::from_handler_args(handler_args);
-            let (plan, source, table) = match source_schema {
-                Some(source_schema) => {
-                    gen_create_table_plan_with_source(
-                        context,
-                        table_name,
-                        columns,
-                        constraints,
-                        source_schema,
-                        source_watermarks,
-                        col_id_gen,
-                        append_only,
-                    )
-                    .await?
-                }
-                None => gen_create_table_plan(
-                    context,
-                    table_name,
-                    columns,
-                    constraints,
-                    col_id_gen,
-                    source_watermarks,
-                    append_only,
-                )?,
-            };
+        let (mut graph, table, source) = regenerate_table(
+            &session,
+            table_name,
+            &original_catalog,
+            source_schema,
+            handler_args,
+            col_id_gen,
+            columns,
+            constraints,
+            source_watermarks,
+            append_only,
+            1
+        )
+        .await?;
 
-            // TODO: avoid this backward conversion.
-            if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
-                Err(ErrorCode::InvalidInputSyntax(
-                    "alter primary key of table is not supported".to_owned(),
-                ))?
+        fn modify_source_to_merge(node: &mut StreamNode) {
+            let n2 = node.clone();
+            if let Some(NodeBody::Union(_u)) = &mut node.node_body {
+                for input in &mut node.input {
+                    if let Some(NodeBody::Source(s)) = &mut input.node_body && s.source_inner.is_none() {
+                        input.node_body = Some(Merge(MergeNode{
+                            upstream_actor_id: vec![],
+                            upstream_fragment_id: 0,
+                            upstream_dispatcher_type: DispatcherType::Hash as _,
+                            fields: n2.fields.clone(),
+                        }));
+
+                        println!("input node body {:?}", input.node_body);
+                        input.identity = "merge".to_string();
+                    }
+                }
+
+                return;
             }
 
-            let graph = StreamFragmentGraph {
-                parallelism: session
-                    .config()
-                    .get_streaming_parallelism()
-                    .map(|parallelism| Parallelism { parallelism }),
-                ..build_graph(plan)
-            };
+            for input in &mut node.input {
+                modify_source_to_merge(input);
+            }
+        }
 
-            // Fill the original table ID.
-            let table = Table {
-                id: original_catalog.id().table_id(),
-                optional_associated_source_id: original_catalog.associated_source_id().map(
-                    |source_id| OptionalAssociatedSourceId::AssociatedSourceId(source_id.into()),
-                ),
-                ..table
-            };
-
-            (graph, table, source)
-        };
+        for fragment in graph.fragments.values_mut() {
+            if let Some(node) = &mut fragment.node {
+                modify_source_to_merge(node);
+            }
+        }
 
         // Calculate the mapping from the original columns to the new columns.
         let col_index_mapping = ColIndexMapping::with_target_size(
@@ -396,6 +378,84 @@ pub async fn handle_create_sink(
         .await?;
 
     Ok(PgResponse::empty_result(StatementType::CREATE_SINK))
+}
+
+pub(crate) async fn regenerate_table(
+    session: &Arc<SessionImpl>,
+    table_name: ObjectName,
+    original_catalog: &Arc<TableCatalog>,
+    source_schema: Option<SourceSchemaV2>,
+    handler_args: HandlerArgs,
+    col_id_gen: ColumnIdGenerator,
+    columns: Vec<ColumnDef>,
+    constraints: Vec<TableConstraint>,
+    source_watermarks: Vec<SourceWatermark>,
+    append_only: bool,
+    with_external_sink: i32,
+) -> Result<(StreamFragmentGraph, Table, Option<PbSource>)> {
+    use risingwave_common::error::ErrorCode;
+    use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
+    use risingwave_pb::catalog::Table;
+    use risingwave_pb::stream_plan::stream_fragment_graph::Parallelism;
+    use risingwave_pb::stream_plan::StreamFragmentGraph;
+
+    use super::create_table::gen_create_table_plan;
+    use crate::handler::create_table::gen_create_table_plan_with_source;
+    use crate::{build_graph, OptimizerContext, TableCatalog};
+
+    let context = OptimizerContext::from_handler_args(handler_args);
+    let (plan, source, table) = match source_schema {
+        Some(source_schema) => {
+            gen_create_table_plan_with_source(
+                context,
+                table_name,
+                columns,
+                constraints,
+                source_schema,
+                source_watermarks,
+                col_id_gen,
+                append_only,
+                with_external_sink,
+            )
+            .await?
+        }
+        None => gen_create_table_plan(
+            context,
+            table_name,
+            columns,
+            constraints,
+            col_id_gen,
+            source_watermarks,
+            append_only,
+            with_external_sink,
+        )?,
+    };
+
+    // TODO: avoid this backward conversion.
+    if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
+        Err(ErrorCode::InvalidInputSyntax(
+            "alter primary key of table is not supported".to_owned(),
+        ))?
+    }
+
+    let graph = StreamFragmentGraph {
+        parallelism: session
+            .config()
+            .get_streaming_parallelism()
+            .map(|parallelism| Parallelism { parallelism }),
+        ..build_graph(plan)
+    };
+
+    // Fill the original table ID.
+    let table = Table {
+        id: original_catalog.id().table_id(),
+        optional_associated_source_id: original_catalog
+            .associated_source_id()
+            .map(|source_id| OptionalAssociatedSourceId::AssociatedSourceId(source_id.into())),
+        ..table
+    };
+
+    Ok((graph, table, source))
 }
 
 /// Transforms the (format, encode, options) from sqlparser AST into an internal struct `SinkFormatDesc`.

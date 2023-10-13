@@ -22,6 +22,7 @@ use itertools::Itertools;
 use risingwave_common::array::stream_chunk::StreamChunkMut;
 use risingwave_common::array::{merge_chunk_row, Op, StreamChunk, StreamChunkCompactor};
 use risingwave_common::catalog::{ColumnCatalog, Field, Schema};
+use risingwave_common::range::RangeBoundsExt;
 use risingwave_connector::dispatch_sink;
 use risingwave_connector::sink::catalog::{SinkId, SinkType};
 use risingwave_connector::sink::log_store::{
@@ -30,6 +31,7 @@ use risingwave_connector::sink::log_store::{
 use risingwave_connector::sink::{
     build_sink, LogSinker, Sink, SinkImpl, SinkParam, SinkWriterParam,
 };
+use tonic::codegen::Body;
 
 use super::error::{StreamExecutorError, StreamExecutorResult};
 use super::{BoxedExecutor, Executor, Message, PkIndices};
@@ -37,7 +39,7 @@ use crate::executor::{expect_first_barrier, ActorContextRef, BoxedMessageStream}
 
 pub struct SinkExecutor<F: LogStoreFactory> {
     input: BoxedExecutor,
-    sink: SinkImpl,
+    sink: Option<SinkImpl>,
     identity: String,
     pk_indices: PkIndices,
     input_columns: Vec<ColumnCatalog>,
@@ -90,7 +92,12 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
 
         println!("param {:?}", sink_param);
 
-        let sink = build_sink(sink_param.clone())?;
+        let sink = if sink_param.sink_into_name.is_some() {
+            Some(build_sink(sink_param.clone())?)
+        } else {
+            Some(build_sink(sink_param.clone())?)
+        };
+
         let input_schema = columns
             .iter()
             .map(|column| Field::from(&column.column_desc))
@@ -119,6 +126,8 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                 .any(|i| !self.sink_param.downstream_pk.contains(i))
         };
 
+        let actor_id = self.actor_context.id;
+
         let write_log_stream = Self::execute_write_log(
             self.input,
             stream_key,
@@ -128,17 +137,40 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
             self.sink_param.sink_type,
             self.actor_context,
             stream_key_sink_pk_mismatch,
-        );
+        )
+        .map(move |x| {
+            if let Ok(Message::Chunk(x)) = &x {
+                println!("{} write log {:#?}", &actor_id, x);
+            }
 
-        dispatch_sink!(self.sink, sink, {
-            let consume_log_stream = Self::execute_consume_log(
-                sink,
-                self.log_reader,
-                self.input_columns,
-                self.sink_writer_param,
-            );
-            select(consume_log_stream.into_stream(), write_log_stream).boxed()
-        })
+            x
+        });
+
+        if let Some(sink) = self.sink {
+            dispatch_sink!(sink, sink, {
+                let consume_log_stream = Self::execute_consume_log(
+                    sink,
+                    self.log_reader,
+                    self.input_columns,
+                    self.sink_writer_param,
+                );
+
+                let x = consume_log_stream.into_stream().map(|xx| {
+                    println!("s consume log {:#?}", xx);
+                    xx
+                });
+                select(x, write_log_stream)
+                    .map(move |x| {
+                        if let Ok(Message::Chunk(x)) = &x {
+                            println!("{} select chunk {:#?}", &actor_id, x);
+                        }
+                        x
+                    })
+                    .boxed()
+            })
+        } else {
+            todo!()
+        }
     }
 
     #[try_stream(ok = Message, error = StreamExecutorError)]
@@ -198,6 +230,7 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
         // after compacting with the stream key, the two event with the same used defined sink pk must have different stream key.
         // So the delete event is not to delete the inserted record in our internal streaming SQL semantic.
         if stream_key_sink_pk_mismatch && sink_type != SinkType::AppendOnly {
+            println!("1111111111");
             let mut chunk_buffer = StreamChunkCompactor::new(stream_key.clone());
             let mut watermark = None;
             #[for_await]
@@ -211,6 +244,7 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                             .with_label_values(&[&sink_id_str, &actor_id_str, &fragment_id_str])
                             .inc_by(c.capacity() as u64);
 
+                        println!("push chunk");
                         chunk_buffer.push_chunk(c);
                     }
                     Message::Barrier(barrier) => {
@@ -226,13 +260,23 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                                 // Force append-only by dropping UPDATE/DELETE messages. We do this when the
                                 // user forces the sink to be append-only while it is actually not based on
                                 // the frontend derivation result.
-                                delete_chunks.push(force_delete_only(c.clone()));
+                                let chunk1 = force_delete_only(c.clone());
+                                if chunk1.cardinality() == 0 {
+                                } else {
+                                    delete_chunks.push(chunk1);
+                                }
                             }
                             insert_chunks.push(force_append_only(c));
                         }
 
+                        let d = delete_chunks.clone();
+                        let l = insert_chunks.clone();
+
                         for c in delete_chunks.into_iter().chain(insert_chunks.into_iter()) {
                             log_writer.write_chunk(c.clone()).await?;
+                            println!("delete {} {:#?}", d.len(), d);
+                            println!("insert {} {:#?}", l.len(), l);
+                            println!("yield 1 {}", c.to_pretty());
                             yield Message::Chunk(c);
                         }
                         if let Some(w) = mem::take(&mut watermark) {
@@ -250,6 +294,7 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                 }
             }
         } else {
+            println!("222222222");
             #[for_await]
             for msg in input {
                 match msg? {
@@ -540,6 +585,7 @@ mod test {
             format_desc: None,
             db_name: "test".into(),
             sink_from_name: "test".into(),
+            sink_into_name: None,
         };
 
         let sink_executor = SinkExecutor::new(

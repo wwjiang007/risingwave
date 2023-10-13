@@ -71,7 +71,7 @@ mod recovery;
 mod schedule;
 mod trace;
 
-pub use self::command::{Command, Reschedule};
+pub use self::command::{Command, ReplaceTableCommand, Reschedule};
 pub use self::schedule::BarrierScheduler;
 pub use self::trace::TracedEpoch;
 

@@ -218,7 +218,7 @@ impl DdlService for DdlServiceImpl {
 
         let req = request.into_inner();
 
-        println!("req {:#?}", req);
+        // println!("req {:#?}", req);
         let sink = req.get_sink()?.clone();
         let fragment_graph = req.get_fragment_graph()?.clone();
         let target_table_change = req.get_target_table_change().cloned().ok();
@@ -281,13 +281,38 @@ impl DdlService for DdlServiceImpl {
         let request = request.into_inner();
         let sink_id = request.sink_id;
         let drop_mode = DropMode::from_request_setting(request.cascade);
-        let version = self
-            .ddl_controller
-            .run_command(DdlCommand::DropStreamingJob(
-                StreamingJobId::Sink(sink_id),
-                drop_mode,
-            ))
-            .await?;
+
+        let change = request.target_table_change;
+
+        let command = if let Some(change) = change {
+            let info = {
+                let mut source = change.source;
+                let mut fragment_graph = change.fragment_graph.unwrap();
+                let mut table = change.table.unwrap();
+                if let Some(OptionalAssociatedSourceId::AssociatedSourceId(source_id)) =
+                    table.optional_associated_source_id
+                {
+                    let source = source.as_mut().unwrap();
+                    let table_id = table.id;
+                    fill_table_source(source, source_id, &mut table, table_id, &mut fragment_graph);
+                }
+                let table_col_index_mapping =
+                    ColIndexMapping::from_protobuf(&change.table_col_index_mapping.unwrap());
+                let stream_job = StreamingJob::Table(source, table);
+
+                ReplaceTableInfo {
+                    streaming_job: stream_job,
+                    fragment_graph,
+                    col_index_mapping: table_col_index_mapping,
+                }
+            };
+
+            DdlCommand::DropStreamingJob(StreamingJobId::Sink(sink_id), drop_mode, Some(info))
+        } else {
+            DdlCommand::DropStreamingJob(StreamingJobId::Sink(sink_id), drop_mode, None)
+        };
+
+        let version = self.ddl_controller.run_command(command).await?;
 
         self.sink_manager
             .stop_sink_coordinator(SinkId::from(sink_id))
@@ -346,6 +371,7 @@ impl DdlService for DdlServiceImpl {
             .run_command(DdlCommand::DropStreamingJob(
                 StreamingJobId::MaterializedView(table_id),
                 drop_mode,
+                None,
             ))
             .await?;
 
@@ -401,6 +427,7 @@ impl DdlService for DdlServiceImpl {
             .run_command(DdlCommand::DropStreamingJob(
                 StreamingJobId::Index(index_id),
                 drop_mode,
+                None,
             ))
             .await?;
 
@@ -498,6 +525,7 @@ impl DdlService for DdlServiceImpl {
             .run_command(DdlCommand::DropStreamingJob(
                 StreamingJobId::Table(source_id.map(|PbSourceId::Id(id)| id), table_id),
                 drop_mode,
+                None,
             ))
             .await?;
 

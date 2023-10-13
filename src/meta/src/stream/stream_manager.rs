@@ -30,9 +30,9 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 use super::Locations;
-use crate::barrier::{BarrierScheduler, Command};
+use crate::barrier::{BarrierScheduler, Command, ReplaceTableCommand};
 use crate::hummock::HummockManagerRef;
-use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv, StreamingJob};
+use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv};
 use crate::model::{ActorId, TableFragments};
 use crate::stream::SourceManagerRef;
 use crate::{MetaError, MetaResult};
@@ -432,6 +432,28 @@ impl GlobalStreamManager {
         let mut replace_table_command = None;
         let mut replace_table_id = None;
 
+        // Register to compaction group beforehand.
+        let hummock_manager_ref = self.hummock_manager.clone();
+        let registered_table_ids = hummock_manager_ref
+            .register_table_fragments(
+                mv_table_id,
+                internal_tables.keys().copied().collect(),
+                &table_properties,
+            )
+            .await?;
+        debug_assert_eq!(
+            registered_table_ids.len(),
+            table_fragments.internal_table_ids().len() + mv_table_id.map_or(0, |_| 1)
+        );
+        revert_funcs.push(Box::pin(async move {
+            if let Err(e) = hummock_manager_ref.unregister_table_ids(&registered_table_ids).await {
+                tracing::warn!("Failed to unregister compaction group for {:#?}. They will be cleaned up on node restart. {:#?}", registered_table_ids, e);
+            }
+        }));
+
+        self.build_actors(&table_fragments, &building_locations, &existing_locations)
+            .await?;
+
         if let Some((
             table_fragments,
             ReplaceTableContext {
@@ -440,7 +462,7 @@ impl GlobalStreamManager {
                 dispatchers,
                 building_locations,
                 existing_locations,
-                table_properties,
+                table_properties: _,
             },
         )) = replace_table_info
         {
@@ -459,7 +481,7 @@ impl GlobalStreamManager {
                 .pre_allocate_splits(&dummy_table_id)
                 .await?;
 
-            replace_table_command = Some(Command::ReplaceTable {
+            replace_table_command = Some(ReplaceTableCommand {
                 old_table_fragments,
                 new_table_fragments: table_fragments,
                 merge_updates,
@@ -469,47 +491,8 @@ impl GlobalStreamManager {
 
             replace_table_id = Some(dummy_table_id);
 
-            // if let Err(err) = self
-            //     .barrier_scheduler
-            //     .run_config_change_command_with_pause(Command::ReplaceTable {
-            //         old_table_fragments,
-            //         new_table_fragments: table_fragments,
-            //         merge_updates,
-            //         dispatchers,
-            //         init_split_assignment,
-            //     })
-            //     .await
-            // {
-            //     self.fragment_manager
-            //         .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(dummy_table_id)))
-            //         .await?;
-            //     return Err(err);
-            // }
+            println!("replace table inject");
         }
-
-        // Register to compaction group beforehand.
-        let hummock_manager_ref = self.hummock_manager.clone();
-        let registered_table_ids = hummock_manager_ref
-            .register_table_fragments(
-                mv_table_id,
-                internal_tables.keys().copied().collect(),
-                &table_properties,
-            )
-            .await?;
-        debug_assert_eq!(
-            registered_table_ids.len(),
-            table_fragments.internal_table_ids().len() + mv_table_id.map_or(0, |_| 1)
-        );
-        revert_funcs.push(Box::pin(async move {
-            if create_type == CreateType::Foreground {
-                if let Err(e) = hummock_manager_ref.unregister_table_ids(&registered_table_ids).await {
-                    tracing::warn!("Failed to unregister compaction group for {:#?}. They will be cleaned up on node restart. {:#?}", registered_table_ids, e);
-                }
-            }
-        }));
-
-        self.build_actors(&table_fragments, &building_locations, &existing_locations)
-            .await?;
 
         // Add table fragments to meta store with state: `State::Initial`.
         self.fragment_manager
@@ -528,6 +511,7 @@ impl GlobalStreamManager {
                 dispatchers,
                 init_split_assignment,
                 definition: definition.to_string(),
+                replace_table: None,
             })
             .await
         {
@@ -537,11 +521,34 @@ impl GlobalStreamManager {
                     .await?;
                 if let Some(dummy_table_id) = replace_table_id {
                     self.fragment_manager
-                        .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(dummy_table_id)))
+                        .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(
+                            dummy_table_id,
+                        )))
                         .await?;
                 }
             }
+
             return Err(err);
+        }
+
+        println!("replace table {:#?}", replace_table_command);
+
+        if let Some(ReplaceTableCommand {
+            old_table_fragments,
+            new_table_fragments,
+            merge_updates,
+            dispatchers,
+            init_split_assignment,
+        }) = replace_table_command
+        {
+            let command = Command::ReplaceTable {
+                old_table_fragments,
+                new_table_fragments,
+                merge_updates,
+                dispatchers,
+                init_split_assignment,
+            };
+            self.barrier_scheduler.run_command(command).await.unwrap();
         }
 
         Ok(())
@@ -1018,7 +1025,7 @@ mod tests {
                 .start_create_table_procedure(&table, vec![])
                 .await?;
             self.global_stream_manager
-                .create_streaming_job(table_fragments, ctx)
+                .create_streaming_job(table_fragments, ctx, None)
                 .await?;
             self.catalog_manager
                 .finish_create_table_procedure(vec![], table)

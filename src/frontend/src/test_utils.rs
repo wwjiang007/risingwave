@@ -399,7 +399,7 @@ impl CatalogWriter for MockCatalogWriter {
         Ok(())
     }
 
-    async fn drop_sink(&self, sink_id: u32, cascade: bool) -> Result<()> {
+    async fn drop_sink(&self, sink_id: u32, cascade: bool, target_table_change: Option<ReplaceTableChange>) -> Result<()> {
         if cascade {
             return Err(ErrorCode::NotSupported(
                 "drop cascade in MockCatalogWriter is unsupported".to_string(),
