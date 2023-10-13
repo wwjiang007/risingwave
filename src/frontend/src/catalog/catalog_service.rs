@@ -26,7 +26,9 @@ use risingwave_pb::catalog::{
 };
 use risingwave_pb::ddl_service::alter_owner_request::Object;
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
-use risingwave_pb::ddl_service::{create_connection_request, PbTableJobType};
+use risingwave_pb::ddl_service::{
+    create_connection_request, PbReplaceTableChange, PbTableJobType, ReplaceTableChange,
+};
 use risingwave_pb::stream_plan::StreamFragmentGraph;
 use risingwave_rpc_client::MetaClient;
 use tokio::sync::watch::Receiver;
@@ -107,7 +109,12 @@ pub trait CatalogWriter: Send + Sync {
         graph: StreamFragmentGraph,
     ) -> Result<()>;
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()>;
+    async fn create_sink(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        target_table_change: Option<PbReplaceTableChange>,
+    ) -> Result<()>;
 
     async fn create_function(&self, function: PbFunction) -> Result<()>;
 
@@ -135,7 +142,12 @@ pub trait CatalogWriter: Send + Sync {
 
     async fn drop_source(&self, source_id: u32, cascade: bool) -> Result<()>;
 
-    async fn drop_sink(&self, sink_id: u32, cascade: bool) -> Result<()>;
+    async fn drop_sink(
+        &self,
+        sink_id: u32,
+        cascade: bool,
+        target_table_change: Option<PbReplaceTableChange>,
+    ) -> Result<()>;
 
     async fn drop_database(&self, database_id: u32) -> Result<()>;
 
@@ -280,8 +292,16 @@ impl CatalogWriter for CatalogWriterImpl {
         self.wait_version(version).await
     }
 
-    async fn create_sink(&self, sink: PbSink, graph: StreamFragmentGraph) -> Result<()> {
-        let (_id, version) = self.meta_client.create_sink(sink, graph).await?;
+    async fn create_sink(
+        &self,
+        sink: PbSink,
+        graph: StreamFragmentGraph,
+        target_table_change: Option<ReplaceTableChange>,
+    ) -> Result<()> {
+        let (_id, version) = self
+            .meta_client
+            .create_sink(sink, graph, target_table_change)
+            .await?;
         self.wait_version(version).await
     }
 
@@ -347,8 +367,16 @@ impl CatalogWriter for CatalogWriterImpl {
         self.wait_version(version).await
     }
 
-    async fn drop_sink(&self, sink_id: u32, cascade: bool) -> Result<()> {
-        let version = self.meta_client.drop_sink(sink_id, cascade).await?;
+    async fn drop_sink(
+        &self,
+        sink_id: u32,
+        cascade: bool,
+        target_table_change: Option<ReplaceTableChange>,
+    ) -> Result<()> {
+        let version = self
+            .meta_client
+            .drop_sink(sink_id, cascade, target_table_change)
+            .await?;
         self.wait_version(version).await
     }
 
