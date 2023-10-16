@@ -62,6 +62,7 @@ struct SharedSplitMap {
     splits: Option<BTreeMap<SplitId, SplitImpl>>,
 }
 
+
 type SharedSplitMapRef = Arc<Mutex<SharedSplitMap>>;
 
 struct ConnectorSourceWorker<P: SourceProperties> {
@@ -178,7 +179,9 @@ impl<P: SourceProperties> ConnectorSourceWorker<P> {
         })?;
         source_is_up(1);
         self.fail_cnt = 0;
+        let start = time::Instant::now();
         let mut current_splits = self.current_splits.lock().await;
+        tracing::info!("list splits lock took {:?}", start.elapsed());
         current_splits.splits.replace(
             splits
                 .into_iter()
@@ -199,7 +202,10 @@ struct ConnectorSourceWorkerHandle {
 
 impl ConnectorSourceWorkerHandle {
     async fn discovered_splits(&self) -> Option<BTreeMap<SplitId, SplitImpl>> {
-        self.splits.lock().await.splits.clone()
+        let start = time::Instant::now();
+        let x = self.splits.lock().await.splits.clone();
+        tracing::info!("discovered splits lock took {:?}", start.elapsed());
+        x
     }
 }
 
@@ -553,7 +559,9 @@ impl SourceManager {
     }
 
     pub async fn drop_source_change(&self, table_fragments_vec: &[TableFragments]) {
+        let start = time::Instant::now();
         let mut core = self.core.lock().await;
+        tracing::info!("drop_source_change lock took {:?}", start.elapsed());
 
         // Extract the fragments that include source operators.
         let source_fragments = table_fragments_vec
@@ -582,7 +590,9 @@ impl SourceManager {
         split_assignment: Option<SplitAssignment>,
         dropped_actors: Option<HashSet<ActorId>>,
     ) {
+        let start = time::Instant::now();
         let mut core = self.core.lock().await;
+        tracing::info!("apply_source_change lock took {:?}", start.elapsed());
         core.apply_source_change(source_fragments, split_assignment, dropped_actors);
     }
 
@@ -596,7 +606,9 @@ impl SourceManager {
         prev_actor_ids: &[ActorId],
         curr_actor_ids: &[ActorId],
     ) -> MetaResult<HashMap<ActorId, Vec<SplitImpl>>> {
+        let start = time::Instant::now();
         let core = self.core.lock().await;
+        tracing::info!("reallocate_splits lock took {:?}", start.elapsed());
 
         let prev_splits = prev_actor_ids
             .iter()
@@ -627,7 +639,9 @@ impl SourceManager {
     }
 
     pub async fn pre_allocate_splits(&self, table_id: &TableId) -> MetaResult<SplitAssignment> {
+        let start = time::Instant::now();
         let core = self.core.lock().await;
+        tracing::info!("pre_allocate_splits lock took {:?}", start.elapsed());
         let table_fragments = core
             .fragment_manager
             .select_table_fragments_by_table_id(table_id)
@@ -643,7 +657,9 @@ impl SourceManager {
                 .get(&source_id)
                 .ok_or_else(|| anyhow!("could not found source {}", source_id))?;
 
+            let start = time::Instant::now();
             if handle.splits.lock().await.splits.is_none() {
+                tracing::info!("pre_allocate_splits inner lock took {:?}", start.elapsed());
                 // force refresh source
                 let (tx, rx) = oneshot::channel();
                 handle
@@ -686,7 +702,9 @@ impl SourceManager {
 
     /// register connector worker for source.
     pub async fn register_source(&self, source: &Source) -> MetaResult<()> {
+        let start = time::Instant::now();
         let mut core = self.core.lock().await;
+        tracing::info!("register_source lock took {:?}", start.elapsed());
         if core.managed_sources.contains_key(&source.get_id()) {
             tracing::warn!("source {} already registered", source.get_id());
         } else {
@@ -824,7 +842,9 @@ impl SourceManager {
 
     /// unregister connector worker for source.
     pub async fn unregister_sources(&self, source_ids: Vec<SourceId>) {
+        let start = time::Instant::now();
         let mut core = self.core.lock().await;
+        tracing::info!("unregister_sources lock took {:?}", start.elapsed());
         for source_id in source_ids {
             if let Some(handle) = core.managed_sources.remove(&source_id) {
                 handle.handle.abort();
@@ -833,13 +853,17 @@ impl SourceManager {
     }
 
     pub async fn list_assignments(&self) -> HashMap<ActorId, Vec<SplitImpl>> {
+        let start = time::Instant::now();
         let core = self.core.lock().await;
+        tracing::info!("list_assignments lock took {:?}", start.elapsed());
         core.actor_splits.clone()
     }
 
     async fn tick(&self) -> MetaResult<()> {
         let diff = {
+            let start = time::Instant::now();
             let core_guard = self.core.lock().await;
+            tracing::info!("tick lock took {:?}", start.elapsed());
             core_guard.diff().await?
         };
 
@@ -857,7 +881,9 @@ impl SourceManager {
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
+            let start = time::Instant::now();
             let _pause_guard = self.paused.lock().await;
+            tracing::info!("run lock took {:?}", start.elapsed());
             if let Err(e) = self.tick().await {
                 tracing::error!(
                     "error happened while running source manager tick: {}",
@@ -868,7 +894,11 @@ impl SourceManager {
     }
 
     pub async fn get_actor_splits(&self) -> HashMap<ActorId, Vec<SplitImpl>> {
-        self.core.lock().await.get_actor_splits()
+        let start = time::Instant::now();
+        let x = self.core.lock().await.get_actor_splits();
+        tracing::info!("get_actor_splits lock took {:?}", start.elapsed());
+        x
+
     }
 }
 

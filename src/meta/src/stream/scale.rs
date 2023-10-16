@@ -21,6 +21,7 @@ use futures::future::BoxFuture;
 use itertools::Itertools;
 use num_integer::Integer;
 use num_traits::abs;
+use tokio::time;
 use risingwave_common::bail;
 use risingwave_common::buffer::{Bitmap, BitmapBuilder};
 use risingwave_common::hash::{ActorMapping, ParallelUnitId, VirtualNode};
@@ -1305,7 +1306,9 @@ impl GlobalStreamManager {
                 .await;
         }));
 
+        let start = time::Instant::now();
         let _source_pause_guard = self.source_manager.paused.lock().await;
+        tracing::info!("source pause: {:?}", start.elapsed());
 
         tracing::debug!("reschedule plan: {:#?}", reschedule_fragment);
 
