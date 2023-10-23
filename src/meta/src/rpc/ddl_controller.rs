@@ -745,10 +745,6 @@ impl DdlController {
             }
         };
 
-        self.stream_manager
-            .drop_streaming_jobs(streaming_job_ids)
-            .await;
-
         if let Some(ReplaceTableInfo {
             streaming_job,
             fragment_graph,
@@ -758,6 +754,10 @@ impl DdlController {
             self.replace_table(streaming_job, fragment_graph, col_index_mapping)
                 .await?;
         }
+
+        self.stream_manager
+            .drop_streaming_jobs(streaming_job_ids)
+            .await;
 
         Ok(version)
     }

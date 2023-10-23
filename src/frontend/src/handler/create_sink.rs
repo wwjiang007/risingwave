@@ -166,8 +166,6 @@ pub fn gen_sink_plan(
         },
     };
 
-    println!("with {:?}", with_options);
-
     let mut plan_root = Planner::new(context).plan_query(bound)?;
     if let Some(col_names) = col_names {
         plan_root.set_out_names(col_names)?;

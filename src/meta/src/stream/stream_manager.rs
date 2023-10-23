@@ -490,8 +490,6 @@ impl GlobalStreamManager {
             });
 
             replace_table_id = Some(dummy_table_id);
-
-            println!("replace table inject");
         }
 
         // Add table fragments to meta store with state: `State::Initial`.
@@ -552,25 +550,6 @@ impl GlobalStreamManager {
 
             return Err(err);
         }
-        // println!("replace table {:#?}", replace_table_command);
-
-        // if let Some(ReplaceTableCommand {
-        //     old_table_fragments,
-        //     new_table_fragments,
-        //     merge_updates,
-        //     dispatchers,
-        //     init_split_assignment,
-        // }) = replace_table_command
-        // {
-        //     let command = Command::ReplaceTable {
-        //         old_table_fragments,
-        //         new_table_fragments,
-        //         merge_updates,
-        //         dispatchers,
-        //         init_split_assignment,
-        //     };
-        //     self.barrier_scheduler.run_command(command).await.unwrap();
-        // }
 
         Ok(())
     }

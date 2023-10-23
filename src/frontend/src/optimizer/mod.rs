@@ -701,8 +701,6 @@ impl PlanRoot {
     ) -> Result<StreamSink> {
         let stream_plan = self.gen_optimized_stream_plan(emit_on_window_close)?;
 
-        println!("prop {:?}", properties);
-
         StreamSink::create(
             stream_plan,
             sink_name,
