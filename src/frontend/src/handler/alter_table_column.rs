@@ -17,23 +17,18 @@ use itertools::Itertools;
 use pgwire::pg_response::{PgResponse, StatementType};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
-
-
-
-
 use risingwave_sqlparser::ast::{
     AlterTableOperation, ColumnOption, Encode, ObjectName, SourceSchemaV2, Statement,
 };
 use risingwave_sqlparser::parser::Parser;
 
 use super::create_source::get_json_schema_location;
-use super::create_table::{ColumnIdGenerator};
+use super::create_table::ColumnIdGenerator;
 use super::{HandlerArgs, RwPgResponse};
 use crate::catalog::root_catalog::SchemaPath;
 use crate::catalog::table_catalog::TableType;
-
-use crate::{Binder};
 use crate::handler::create_sink::regenerate_table;
+use crate::Binder;
 
 /// Handle `ALTER TABLE [ADD|DROP] COLUMN` statements. The `operation` must be either `AddColumn` or
 /// `DropColumn`.
@@ -199,7 +194,7 @@ pub async fn handle_alter_table_column(
         append_only,
         0,
     )
-        .await?;
+    .await?;
     // Calculate the mapping from the original columns to the new columns.
     let col_index_mapping = ColIndexMapping::with_target_size(
         original_catalog

@@ -324,10 +324,14 @@ impl SinkImpl {
         param.properties.remove(PRIVATE_LINK_TARGET_KEY);
         param.properties.remove(CONNECTION_NAME_KEY);
 
-        let sink_type = param
-            .properties
-            .get(CONNECTOR_TYPE_KEY)
-            .ok_or_else(|| SinkError::Config(anyhow!("missing config: {}", CONNECTOR_TYPE_KEY)))?;
+        let sink_type = if param.sink_into_name.is_some() {
+            "table"
+        } else {
+            param.properties.get(CONNECTOR_TYPE_KEY).ok_or_else(|| {
+                SinkError::Config(anyhow!("missing config: {}", CONNECTOR_TYPE_KEY))
+            })?
+        };
+
         match_sink_name_str!(
             sink_type.to_lowercase().as_str(),
             SinkType,

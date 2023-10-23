@@ -39,7 +39,7 @@ use crate::executor::{expect_first_barrier, ActorContextRef, BoxedMessageStream}
 
 pub struct SinkExecutor<F: LogStoreFactory> {
     input: BoxedExecutor,
-    sink: Option<SinkImpl>,
+    sink: SinkImpl,
     identity: String,
     pk_indices: PkIndices,
     input_columns: Vec<ColumnCatalog>,
@@ -90,13 +90,7 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
     ) -> StreamExecutorResult<Self> {
         let (log_reader, log_writer) = log_store_factory.build().await;
 
-        println!("param {:?}", sink_param);
-
-        let sink = if sink_param.sink_into_name.is_some() {
-            Some(build_sink(sink_param.clone())?)
-        } else {
-            Some(build_sink(sink_param.clone())?)
-        };
+        let sink = build_sink(sink_param.clone())?;
 
         let input_schema = columns
             .iter()
@@ -126,8 +120,6 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                 .any(|i| !self.sink_param.downstream_pk.contains(i))
         };
 
-        let actor_id = self.actor_context.id;
-
         let write_log_stream = Self::execute_write_log(
             self.input,
             stream_key,
@@ -137,40 +129,18 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
             self.sink_param.sink_type,
             self.actor_context,
             stream_key_sink_pk_mismatch,
-        )
-        .map(move |x| {
-            if let Ok(Message::Chunk(x)) = &x {
-                println!("{} write log {:#?}", &actor_id, x);
-            }
+        );
 
-            x
-        });
+        dispatch_sink!(self.sink, sink, {
+            let consume_log_stream = Self::execute_consume_log(
+                sink,
+                self.log_reader,
+                self.input_columns,
+                self.sink_writer_param,
+            );
 
-        if let Some(sink) = self.sink {
-            dispatch_sink!(sink, sink, {
-                let consume_log_stream = Self::execute_consume_log(
-                    sink,
-                    self.log_reader,
-                    self.input_columns,
-                    self.sink_writer_param,
-                );
-
-                let x = consume_log_stream.into_stream().map(|xx| {
-                    println!("s consume log {:#?}", xx);
-                    xx
-                });
-                select(x, write_log_stream)
-                    .map(move |x| {
-                        if let Ok(Message::Chunk(x)) = &x {
-                            println!("{} select chunk {:#?}", &actor_id, x);
-                        }
-                        x
-                    })
-                    .boxed()
-            })
-        } else {
-            todo!()
-        }
+            select(consume_log_stream.into_stream(), write_log_stream).boxed()
+        })
     }
 
     #[try_stream(ok = Message, error = StreamExecutorError)]
@@ -230,7 +200,6 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
         // after compacting with the stream key, the two event with the same used defined sink pk must have different stream key.
         // So the delete event is not to delete the inserted record in our internal streaming SQL semantic.
         if stream_key_sink_pk_mismatch && sink_type != SinkType::AppendOnly {
-            println!("1111111111");
             let mut chunk_buffer = StreamChunkCompactor::new(stream_key.clone());
             let mut watermark = None;
             #[for_await]
@@ -243,8 +212,6 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                             .sink_input_row_count
                             .with_label_values(&[&sink_id_str, &actor_id_str, &fragment_id_str])
                             .inc_by(c.capacity() as u64);
-
-                        println!("push chunk");
                         chunk_buffer.push_chunk(c);
                     }
                     Message::Barrier(barrier) => {
@@ -269,14 +236,11 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                             insert_chunks.push(force_append_only(c));
                         }
 
-                        let d = delete_chunks.clone();
-                        let l = insert_chunks.clone();
+                        let _d = delete_chunks.clone();
+                        let _l = insert_chunks.clone();
 
                         for c in delete_chunks.into_iter().chain(insert_chunks.into_iter()) {
                             log_writer.write_chunk(c.clone()).await?;
-                            println!("delete {} {:#?}", d.len(), d);
-                            println!("insert {} {:#?}", l.len(), l);
-                            println!("yield 1 {}", c.to_pretty());
                             yield Message::Chunk(c);
                         }
                         if let Some(w) = mem::take(&mut watermark) {
@@ -294,7 +258,6 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
                 }
             }
         } else {
-            println!("222222222");
             #[for_await]
             for msg in input {
                 match msg? {

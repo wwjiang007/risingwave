@@ -503,18 +503,40 @@ impl GlobalStreamManager {
 
         let init_split_assignment = self.source_manager.pre_allocate_splits(&table_id).await?;
 
-        if let Err(err) = self
-            .barrier_scheduler
-            .run_command(Command::CreateStreamingJob {
+        let command = if let Some(ReplaceTableCommand {
+            old_table_fragments,
+            new_table_fragments,
+            merge_updates,
+            dispatchers: table_dispatchers,
+            init_split_assignment: table_init_split_assignment,
+        }) = replace_table_command
+        {
+            Command::CreateStreamingJob {
+                table_fragments,
+                upstream_mview_actors,
+                dispatchers,
+                init_split_assignment,
+                definition: definition.to_string(),
+                replace_table: Some(ReplaceTableCommand {
+                    old_table_fragments,
+                    new_table_fragments,
+                    merge_updates,
+                    dispatchers: table_dispatchers,
+                    init_split_assignment: table_init_split_assignment,
+                }),
+            }
+        } else {
+            Command::CreateStreamingJob {
                 table_fragments,
                 upstream_mview_actors,
                 dispatchers,
                 init_split_assignment,
                 definition: definition.to_string(),
                 replace_table: None,
-            })
-            .await
-        {
+            }
+        };
+
+        if let Err(err) = self.barrier_scheduler.run_command(command).await {
             if create_type == CreateType::Foreground {
                 self.fragment_manager
                     .drop_table_fragments_vec(&HashSet::from_iter(std::iter::once(table_id)))
@@ -530,26 +552,25 @@ impl GlobalStreamManager {
 
             return Err(err);
         }
+        // println!("replace table {:#?}", replace_table_command);
 
-        println!("replace table {:#?}", replace_table_command);
-
-        if let Some(ReplaceTableCommand {
-            old_table_fragments,
-            new_table_fragments,
-            merge_updates,
-            dispatchers,
-            init_split_assignment,
-        }) = replace_table_command
-        {
-            let command = Command::ReplaceTable {
-                old_table_fragments,
-                new_table_fragments,
-                merge_updates,
-                dispatchers,
-                init_split_assignment,
-            };
-            self.barrier_scheduler.run_command(command).await.unwrap();
-        }
+        // if let Some(ReplaceTableCommand {
+        //     old_table_fragments,
+        //     new_table_fragments,
+        //     merge_updates,
+        //     dispatchers,
+        //     init_split_assignment,
+        // }) = replace_table_command
+        // {
+        //     let command = Command::ReplaceTable {
+        //         old_table_fragments,
+        //         new_table_fragments,
+        //         merge_updates,
+        //         dispatchers,
+        //         init_split_assignment,
+        //     };
+        //     self.barrier_scheduler.run_command(command).await.unwrap();
+        // }
 
         Ok(())
     }

@@ -119,6 +119,17 @@ pub fn gen_sink_plan(
     let col_names = get_column_names(&bound, session, stmt.columns)?;
 
     let mut with_options = context.with_options().clone();
+
+    if sink_into_table_name.is_some() {
+        let prev = with_options
+            .inner_mut()
+            .insert(CONNECTOR_TYPE_KEY.to_string(), "table".to_string());
+
+        if let Some(prev) = prev {
+            tracing::warn!("connector {} replaced by table", prev);
+        }
+    }
+
     let connection_id = {
         let conn_id =
             resolve_privatelink_in_with_option(&mut with_options, &sink_schema_name, session)?;
@@ -132,16 +143,18 @@ pub fn gen_sink_plan(
 
     let connector = with_options
         .get(CONNECTOR_TYPE_KEY)
+        .cloned()
         .ok_or_else(|| ErrorCode::BindError(format!("missing field '{CONNECTOR_TYPE_KEY}'")))?;
+
     let format_desc = match stmt.sink_schema {
         // Case A: new syntax `format ... encode ...`
         Some(f) => {
-            validate_compatibility(connector, &f)?;
+            validate_compatibility(&connector, &f)?;
             Some(bind_sink_format_desc(f)?)
         }
         None => match with_options.get(SINK_TYPE_OPTION) {
             // Case B: old syntax `type = '...'`
-            Some(t) => SinkFormatDesc::from_legacy_type(connector, t)?.map(|mut f| {
+            Some(t) => SinkFormatDesc::from_legacy_type(&connector, t)?.map(|mut f| {
                 session.notice_to_user("Consider using the newer syntax `FORMAT ... ENCODE ...` instead of `type = '...'`.");
                 if let Some(v) = with_options.get(SINK_USER_FORCE_APPEND_ONLY_OPTION) {
                     f.options.insert(SINK_USER_FORCE_APPEND_ONLY_OPTION.into(), v.into());
@@ -152,6 +165,8 @@ pub fn gen_sink_plan(
             None => None,
         },
     };
+
+    println!("with {:?}", with_options);
 
     let mut plan_root = Planner::new(context).plan_query(bound)?;
     if let Some(col_names) = col_names {
@@ -304,7 +319,7 @@ pub async fn handle_create_sink(
             constraints,
             source_watermarks,
             append_only,
-            1
+            1,
         )
         .await?;
 

@@ -179,8 +179,27 @@ impl Command {
             Command::Pause(_) => CommandChanges::None,
             Command::Resume(_) => CommandChanges::None,
             Command::CreateStreamingJob {
-                table_fragments, ..
-            } => CommandChanges::CreateTable(table_fragments.table_id()),
+                table_fragments,
+                replace_table,
+                ..
+            } => {
+                if let Some(ReplaceTableCommand {
+                    old_table_fragments,
+                    new_table_fragments,
+                    ..
+                }) = replace_table
+                {
+                    let to_add = new_table_fragments.actor_ids().into_iter().collect();
+                    let to_remove = old_table_fragments.actor_ids().into_iter().collect();
+
+                    CommandChanges::Combined(vec![
+                        CommandChanges::CreateTable(table_fragments.table_id()),
+                        CommandChanges::Actor { to_add, to_remove },
+                    ])
+                } else {
+                    CommandChanges::CreateTable(table_fragments.table_id())
+                }
+            }
             Command::DropStreamingJobs(table_ids) => CommandChanges::DropTables(table_ids.clone()),
             Command::CancelStreamingJob(table_fragments) => {
                 CommandChanges::DropTables(std::iter::once(table_fragments.table_id()).collect())

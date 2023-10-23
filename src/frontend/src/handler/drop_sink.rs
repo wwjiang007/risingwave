@@ -134,7 +134,7 @@ pub async fn handle_drop_sink(
             panic!("unexpected statement type: {:?}", definition);
         };
 
-        let (mut graph, table, source) = regenerate_table(
+        let (graph, table, source) = regenerate_table(
             &session,
             table_name,
             &original_catalog,
@@ -172,7 +172,9 @@ pub async fn handle_drop_sink(
     }
 
     let catalog_writer = session.catalog_writer()?;
-    catalog_writer.drop_sink(sink_id.sink_id, cascade, target_table_change).await?;
+    catalog_writer
+        .drop_sink(sink_id.sink_id, cascade, target_table_change)
+        .await?;
 
     Ok(PgResponse::empty_result(StatementType::DROP_SINK))
 }

@@ -3,7 +3,7 @@ use crate::sink::{
     DummySinkCommitCoordinator, LogSinker, Result, Sink, SinkError, SinkParam, SinkWriterParam,
 };
 
-pub const TABLE_SINK: &str = "Table";
+pub const TABLE_SINK: &str = "table";
 
 #[derive(Debug)]
 pub struct TableSink;
