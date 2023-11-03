@@ -18,6 +18,7 @@ use std::sync::{Arc, LazyLock};
 
 use either::Either;
 use anyhow::Context;
+use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use maplit::{convert_args, hashmap};
 use pgwire::pg_response::{PgResponse, StatementType};
@@ -52,10 +53,12 @@ use crate::expr::{ExprImpl, InputRef, Literal};
 use crate::handler::create_table::ColumnIdGenerator;
 use crate::handler::privilege::resolve_query_privileges;
 use crate::handler::HandlerArgs;
+use crate::optimizer::plan_node::generic::PhysicalPlanRef;
 use crate::optimizer::plan_node::{
     generic, Explain, PlanTreeNodeUnary, StreamExchange, StreamProject,
 };
-use crate::optimizer::property::Distribution::HashShard;
+use crate::optimizer::property::Distribution::{HashShard, SomeShard};
+use crate::optimizer::property::{Distribution, Order, RequiredDist};
 use crate::optimizer::{OptimizerContext, OptimizerContextRef, PlanRef, RelationCollectorVisitor};
 use crate::scheduler::streaming_manager::CreatingStreamingJobInfo;
 use crate::session::SessionImpl;
@@ -93,7 +96,6 @@ pub fn gen_sink_plan(
     session: &SessionImpl,
     context: OptimizerContextRef,
     stmt: CreateSinkStatement,
-    inject_exchange: Option<Vec<usize>>,
 ) -> Result<(Box<Query>, PlanRef, SinkCatalog)> {
     let db_name = session.database();
     let (sink_schema_name, sink_table_name) =
@@ -196,12 +198,7 @@ pub fn gen_sink_plan(
     )?;
     let sink_desc = sink_plan.sink_desc().clone();
 
-    let sink_plan: PlanRef = if let Some(idxes) = inject_exchange {
-        let exchange = StreamExchange::new(sink_plan.input(), HashShard(idxes)).into();
-        sink_plan.clone_with_input(exchange).into()
-    } else {
-        sink_plan.into()
-    };
+    let sink_plan: PlanRef = sink_plan.into();
 
     let ctx = sink_plan.ctx();
     let explain_trace = ctx.is_explain_trace();
@@ -224,6 +221,16 @@ pub fn gen_sink_plan(
     Ok((query, sink_plan, sink_catalog))
 }
 
+fn dfs_print(node: &StreamNode, depth: i32) {
+    if let Some(body) = &node.node_body {
+        println!("{}{:?}", "\t".repeat(depth as usize), body.to_string());
+    }
+
+    for input in &node.input {
+        dfs_print(input, depth + 1);
+    }
+}
+
 pub async fn handle_create_sink(
     handle_args: HandlerArgs,
     stmt: CreateSinkStatement,
@@ -241,6 +248,7 @@ pub async fn handle_create_sink(
     let target_table = stmt.into_table_name.clone();
 
     let mut target_table_change = None;
+    let mut table_dist = None;
     if let Some(table_name) = target_table {
         let db_name = session.database();
         let (schema_name, real_table_name) =
@@ -294,7 +302,7 @@ pub async fn handle_create_sink(
             panic!("unexpected statement type: {:?}", definition);
         };
 
-        let (mut graph, table, source) = regenerate_table(
+        let (mut graph, table, source, dist) = regenerate_table(
             &session,
             table_name,
             &original_catalog,
@@ -309,8 +317,25 @@ pub async fn handle_create_sink(
         )
         .await?;
 
+        table_dist = Some(dist);
+
         fn modify_source_to_merge(node: &mut StreamNode) {
             let n2 = node.clone();
+            if let Some(NodeBody::Dml(d)) = &node.node_body {
+                return;
+            }
+
+            if let Some(NodeBody::Source(s)) = &mut node.node_body && s.source_inner.is_none() {
+                println!("rewriting");
+                node.node_body = Some(Merge(MergeNode{
+                    upstream_actor_id: vec![],
+                    upstream_fragment_id: 0,
+                    upstream_dispatcher_type: DispatcherType::Hash as _,
+                    fields: n2.fields.clone(),
+                }));
+                node.identity = "merge".to_string();
+            }
+
             if let Some(NodeBody::Union(_u)) = &mut node.node_body {
                 for input in &mut node.input {
                     if let Some(NodeBody::Project(_p)) = &mut input.node_body {
@@ -343,6 +368,12 @@ pub async fn handle_create_sink(
 
             for input in &mut node.input {
                 modify_source_to_merge(input);
+            }
+        }
+
+        for fragment in graph.fragments.values() {
+            if let Some(node) = &fragment.node {
+                dfs_print(node, 0);
             }
         }
 
@@ -380,12 +411,7 @@ pub async fn handle_create_sink(
         let (query, plan, sink) = if let Some(x) = &target_table_change {
             let table1 = x.table.clone().unwrap();
 
-            let xx = table1
-                .pk
-                .iter()
-                .map(|x| x.column_index as usize)
-                .collect_vec();
-            let (query, plan, sink) = gen_sink_plan(&session, context.clone(), stmt, Some(xx))?;
+            let (query, mut plan, sink) = gen_sink_plan(&session, context.clone(), stmt)?;
 
             println!("columns {:#?}", sink.full_columns());
 
@@ -394,6 +420,20 @@ pub async fn handle_create_sink(
             for col in sink.full_columns() {
                 println!("col {:?} is gen {}", col, col.is_generated());
             }
+
+            // let sink = plan.as_stream_sink().unwrap();
+
+            // StreamSi    // let sink_plan: PlanRef = if let Some(idxes) = inject_exchange {
+            // //     let exchange = StreamExchange::new(sink_plan.input(), HashShard(idxes)).into();
+            // //     sink_plan.clone_with_input(exchange).into()
+            // // } else {
+            // //     sink_plan.into()
+            // // };
+
+            //            sink.input().
+            // sink.clone_with_input()
+            // RequiredDist::hash_shard(pk_column_indices)
+            //     .enforce_if_not_satisfies(dml_node, &Order::any())?
 
             #[derive(PartialEq, Debug, Copy, Clone)]
             enum PrimaryKeyKind {
@@ -410,6 +450,47 @@ pub async fn handle_create_sink(
                 PrimaryKeyKind::UserDefinedPrimaryKey
             };
 
+            match kind {
+                PrimaryKeyKind::UserDefinedPrimaryKey => {}
+                _ => {
+                    let sink_plan = plan.as_stream_sink().unwrap();
+
+                    let mut input = sink_plan.input();
+
+                    // table1.distribution_key
+
+                    input = RequiredDist::PhysicalDist(table_dist.unwrap())
+                        .enforce_if_not_satisfies(input, &Order::any())?;
+
+                    println!("sink {:#?}", sink);
+                    // let input = StreamExchange::new(input, ).into();
+
+                    plan = sink_plan.clone_with_input(input).into();
+
+                    // println!("{:?}", sink.plan_pk);
+                    //
+                    // todo!()
+
+                    // let pk_column_indices = table1
+                    //     .get_pk_column_ids()
+                    //     .iter()
+                    //     .map(|col_id| {
+                    //         table1
+                    //             .columns
+                    //             .iter()
+                    //             .position(|col| col.get_column_desc().unwrap().column_id == *col_id)
+                    //             .unwrap()
+                    //     })
+                    //     .collect_vec();
+                    //
+
+                    // let exchange = StreamExchange::new(sink_plan.input(), HashShard(pk_column_indices)).into();
+                    // let sink_plan = sink_plan.clone_with_input(exchange).into();
+                    //
+                    // sink_plan
+                }
+            }
+
             let plan: PlanRef = match kind {
                 PrimaryKeyKind::UserDefinedPrimaryKey
                 | PrimaryKeyKind::RowIdAsPrimaryKey
@@ -421,8 +502,9 @@ pub async fn handle_create_sink(
                         .iter()
                         .map(|col| {
                             let col_desc = col.get_column_desc().unwrap();
+                            let generated = col_desc.generated_or_default_column.is_some();
                             let data_type = col_desc.get_column_type().unwrap();
-                            DataType::from(data_type)
+                            (DataType::from(data_type), generated)
                         })
                         .collect_vec();
 
@@ -433,7 +515,11 @@ pub async fn handle_create_sink(
                         .filter(|(_i, c)| !c.is_hidden())
                         .collect_vec();
 
-                    for (idx, data_type) in table_columns.iter().enumerate() {
+                    for (idx, (data_type, generated)) in table_columns.iter().enumerate() {
+                        if *generated {
+                            continue;
+                        }
+
                         if idx < sink_visable_columns.len() {
                             let (sink_col_idx, sink_column) = sink_visable_columns[idx];
 
@@ -466,7 +552,7 @@ pub async fn handle_create_sink(
 
             (query, plan, sink)
         } else {
-            gen_sink_plan(&session, context.clone(), stmt, None)?
+            gen_sink_plan(&session, context.clone(), stmt)?
         };
 
         let has_order_by = !query.order_by.is_empty();
@@ -523,7 +609,7 @@ pub(crate) async fn regenerate_table(
     source_watermarks: Vec<SourceWatermark>,
     append_only: bool,
     with_external_sink: i32,
-) -> Result<(StreamFragmentGraph, Table, Option<PbSource>)> {
+) -> Result<(StreamFragmentGraph, Table, Option<PbSource>, Distribution)> {
     use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
 
     use super::create_table::gen_create_table_plan;
@@ -557,6 +643,8 @@ pub(crate) async fn regenerate_table(
         )?,
     };
 
+    let dist = plan.distribution().to_owned();
+
     // TODO: avoid this backward conversion.
     if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
         Err(ErrorCode::InvalidInputSyntax(
@@ -581,7 +669,7 @@ pub(crate) async fn regenerate_table(
         ..table
     };
 
-    Ok((graph, table, source))
+    Ok((graph, table, source, dist))
 }
 
 /// Transforms the (format, encode, options) from sqlparser AST into an internal struct `SinkFormatDesc`.
