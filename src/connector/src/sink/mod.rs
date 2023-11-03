@@ -77,6 +77,7 @@ macro_rules! for_all_sinks {
                 { DeltaLake, $crate::sink::remote::DeltaLakeSink },
                 { ElasticSearch, $crate::sink::remote::ElasticSearchSink },
                 { Cassandra, $crate::sink::remote::CassandraSink },
+                { DorisJava, $crate::sink::remote::DorisJavaSink },
                 { Doris, $crate::sink::doris::DorisSink },
                 { Test, $crate::sink::test_sink::TestSink }
             }
