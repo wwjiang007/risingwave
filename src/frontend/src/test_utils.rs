@@ -38,7 +38,7 @@ use risingwave_pb::catalog::{
 };
 use risingwave_pb::ddl_service::alter_owner_request::Object;
 use risingwave_pb::ddl_service::{
-    create_connection_request, DdlProgress, PbTableJobType, ReplaceTableChange,
+    create_connection_request, DdlProgress, PbTableJobType, ReplaceTablePlan,
 };
 use risingwave_pb::hummock::write_limits::WriteLimit;
 use risingwave_pb::hummock::{
@@ -312,7 +312,7 @@ impl CatalogWriter for MockCatalogWriter {
         &self,
         sink: PbSink,
         graph: StreamFragmentGraph,
-        _target_table_change: Option<ReplaceTableChange>,
+        _affected_table_change: Option<ReplaceTablePlan>,
     ) -> Result<()> {
         self.create_sink_inner(sink, graph)
     }
@@ -436,7 +436,7 @@ impl CatalogWriter for MockCatalogWriter {
         &self,
         sink_id: u32,
         cascade: bool,
-        _target_table_change: Option<ReplaceTableChange>,
+        _target_table_change: Option<ReplaceTablePlan>,
     ) -> Result<()> {
         if cascade {
             return Err(ErrorCode::NotSupported(

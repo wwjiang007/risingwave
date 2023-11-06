@@ -27,7 +27,7 @@ use risingwave_pb::catalog::{
 use risingwave_pb::ddl_service::alter_owner_request::Object;
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
 use risingwave_pb::ddl_service::{
-    create_connection_request, PbReplaceTableChange, PbTableJobType, ReplaceTableChange,
+    create_connection_request, PbReplaceTablePlan, PbTableJobType, ReplaceTablePlan,
 };
 use risingwave_pb::stream_plan::StreamFragmentGraph;
 use risingwave_rpc_client::MetaClient;
@@ -113,7 +113,7 @@ pub trait CatalogWriter: Send + Sync {
         &self,
         sink: PbSink,
         graph: StreamFragmentGraph,
-        target_table_change: Option<PbReplaceTableChange>,
+        affected_table_change: Option<PbReplaceTablePlan>,
     ) -> Result<()>;
 
     async fn create_function(&self, function: PbFunction) -> Result<()>;
@@ -146,7 +146,7 @@ pub trait CatalogWriter: Send + Sync {
         &self,
         sink_id: u32,
         cascade: bool,
-        target_table_change: Option<PbReplaceTableChange>,
+        affected_table_change: Option<PbReplaceTablePlan>,
     ) -> Result<()>;
 
     async fn drop_database(&self, database_id: u32) -> Result<()>;
@@ -296,11 +296,11 @@ impl CatalogWriter for CatalogWriterImpl {
         &self,
         sink: PbSink,
         graph: StreamFragmentGraph,
-        target_table_change: Option<ReplaceTableChange>,
+        affected_table_change: Option<ReplaceTablePlan>,
     ) -> Result<()> {
         let (_id, version) = self
             .meta_client
-            .create_sink(sink, graph, target_table_change)
+            .create_sink(sink, graph, affected_table_change)
             .await?;
         self.wait_version(version).await
     }
@@ -371,11 +371,11 @@ impl CatalogWriter for CatalogWriterImpl {
         &self,
         sink_id: u32,
         cascade: bool,
-        target_table_change: Option<ReplaceTableChange>,
+        affected_table_change: Option<ReplaceTablePlan>,
     ) -> Result<()> {
         let version = self
             .meta_client
-            .drop_sink(sink_id, cascade, target_table_change)
+            .drop_sink(sink_id, cascade, affected_table_change)
             .await?;
         self.wait_version(version).await
     }
