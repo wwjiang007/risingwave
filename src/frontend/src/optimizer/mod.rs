@@ -472,6 +472,13 @@ impl PlanRoot {
             Ok(node)
         }
 
+        #[derive(PartialEq, Debug, Copy, Clone)]
+        enum PrimaryKeyKind {
+            UserDefinedPrimaryKey,
+            RowIdAsPrimaryKey,
+            AppendOnly,
+        }
+
         fn inject_dml_node(
             columns: &[ColumnCatalog],
             append_only: bool,
@@ -494,13 +501,6 @@ impl PlanRoot {
             };
 
             Ok(dml_node)
-        }
-
-        #[derive(PartialEq, Debug, Copy, Clone)]
-        enum PrimaryKeyKind {
-            UserDefinedPrimaryKey,
-            RowIdAsPrimaryKey,
-            AppendOnly,
         }
 
         let kind = if append_only {
