@@ -635,7 +635,7 @@ impl GlobalStreamManager {
                 .drop_streaming_jobs_impl(streaming_job_ids)
                 .await
                 .inspect_err(|err| {
-                    tracing::error ! (error = ? err, "Failed to drop streaming jobs");
+                    tracing::error!(error = ? err, "Failed to drop streaming jobs");
                 });
         }
     }
@@ -660,7 +660,7 @@ impl GlobalStreamManager {
             .unregister_table_fragments_vec(&table_fragments_vec)
             .await
         {
-            tracing::warn ! (
+            tracing::warn!(
         "Failed to unregister compaction group for {:#?}. They will be cleaned up on node restart. {:#?}",
         table_fragments_vec,
         e
@@ -697,33 +697,33 @@ impl GlobalStreamManager {
 
         // NOTE(kwannoel): For recovered stream jobs, we can directly cancel them by running the barrier command,
         // since Barrier manager manages the recovered stream jobs.
-        let futures = recovered_job_ids.into_iter().map( | id | async move {
-        tracing::debug ! ( ? id, "cancelling recovered streaming job");
-        let result: MetaResult < () > = try {
-        let fragment = self
-        .fragment_manager
-        .select_table_fragments_by_table_id( &id)
-        .await ?;
-        if fragment.is_created() {
-        Err(MetaError::invalid_parameter(format ! (
-        "streaming job {} is already created",
-        id
-        ))) ?;
-        }
-        self.barrier_scheduler
-        .run_command(Command::CancelStreamingJob(fragment))
-        .await ?;
-        };
-        match result {
-        Ok(_) => {
-        tracing::info ! ( ? id, "cancelled recovered streaming job");
-        Some(id)
-        }
-        Err(_) => {
-        tracing::error ! ( ? id, "failed to cancel recovered streaming job, does it correspond to any jobs in `SHOW JOBS`?");
-        None
-        }
-        }
+        let futures = recovered_job_ids.into_iter().map(|id| async move {
+            tracing::debug!( ? id, "cancelling recovered streaming job");
+            let result: MetaResult<()> = try {
+                let fragment = self
+                    .fragment_manager
+                    .select_table_fragments_by_table_id(&id)
+                    .await?;
+                if fragment.is_created() {
+                    Err(MetaError::invalid_parameter(format!(
+                        "streaming job {} is already created",
+                        id
+                    )))?;
+                }
+                self.barrier_scheduler
+                    .run_command(Command::CancelStreamingJob(fragment))
+                    .await?;
+            };
+            match result {
+                Ok(_) => {
+                    tracing::info!( ? id, "cancelled recovered streaming job");
+                    Some(id)
+                }
+                Err(_) => {
+                    tracing::error!( ? id, "failed to cancel recovered streaming job, does it correspond to any jobs in `SHOW JOBS`?");
+                    None
+                }
+            }
         });
         let cancelled_recovered_ids = join_all(futures).await.into_iter().flatten().collect_vec();
 
