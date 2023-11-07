@@ -646,7 +646,7 @@ impl PlanRoot {
             RequiredDist::ShardByKey(bitset)
         };
 
-        // let stream_plan = inline_session_timezone_in_exprs(context, stream_plan)?;
+        let stream_plan = inline_session_timezone_in_exprs(context, stream_plan)?;
 
         StreamMaterialize::create_for_table(
             stream_plan,
