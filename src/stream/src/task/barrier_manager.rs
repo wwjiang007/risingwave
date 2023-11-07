@@ -168,7 +168,7 @@ impl LocalBarrierManager {
                     }
                 }
                 None => {
-                    //                    bail!("sender for actor {} does not exist", actor_id)
+                    bail!("sender for actor {} does not exist", actor_id)
                 }
             }
         }
