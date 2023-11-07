@@ -18,6 +18,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use itertools::Itertools;
 use risingwave_common::config::DefaultParallelism;
 use risingwave_common::hash::VirtualNode;
@@ -593,10 +594,10 @@ impl DdlController {
         let sink_fragment = sink_table_fragments
             .fragments()
             .into_iter()
-            .filter(|x| (x.fragment_type_mask & FragmentTypeFlag::Sink as u32) != 0)
+            .filter(|fragment| (fragment.fragment_type_mask & FragmentTypeFlag::Sink as u32) != 0)
             .exactly_one()
             .cloned()
-            .unwrap();
+            .map_err(|e| anyhow!("sink fragment not found: {}", e))?;
 
         let sink_actor_ids = sink_fragment
             .actors
@@ -621,6 +622,8 @@ impl DdlController {
                     visit_stream_node(node, |body| {
                         if let NodeBody::Merge(m) = body && m.upstream_actor_id.is_empty() {
                             target_fragment_id = Some(*fragment_id);
+                            fragment.fragment_type_mask &= !(FragmentTypeFlag::Source as u32);
+                            return
                         };
                     })
                 };
@@ -629,9 +632,12 @@ impl DdlController {
 
         let sink_actor_ids = sink_actor_ids.into_iter().sorted().collect_vec();
 
+        let target_fragment_id =
+            target_fragment_id.expect("fragment of placeholder merger not found");
+
         let merge_actor_ids = replace_table_table_fragments
             .fragments
-            .get(&target_fragment_id.unwrap())
+            .get(&target_fragment_id)
             .unwrap()
             .actors
             .iter()
@@ -654,11 +660,12 @@ impl DdlController {
                 if let Some(node) = &mut actor.nodes {
                     visit_stream_node(node, |body| {
                         if let NodeBody::Merge(m) = body && m.upstream_actor_id.is_empty() {
-                            let i = merge_to_sink.get(&actor.actor_id).cloned().unwrap();
-                            m.upstream_actor_id = vec![*i];
+                            let upstream_actor_id = *merge_to_sink.get(&actor.actor_id).cloned().unwrap();
+                            m.upstream_actor_id = vec![upstream_actor_id];
                             m.upstream_fragment_id = sink_fragment.fragment_id;
                             m.upstream_dispatcher_type = PbDispatcherType::NoShuffle as _;
-                            actor.upstream_actor_id = vec![*i];
+
+                            actor.upstream_actor_id = vec![upstream_actor_id];
                         }
                     })
                 }
@@ -671,13 +678,14 @@ impl DdlController {
             .columns
             .iter()
             .enumerate()
-            .filter(|(_a, b)| {
-                b.get_column_desc()
+            .filter(|(_, column)| {
+                column
+                    .get_column_desc()
                     .unwrap()
                     .generated_or_default_column
                     .is_none()
             })
-            .map(|(a, _b)| a as u32)
+            .map(|(a, _)| a as u32)
             .collect_vec();
 
         for actor_id in sink_actor_ids.iter() {
@@ -690,7 +698,7 @@ impl DdlController {
                     dist_key_indices: vec![],
                     output_indices: output_indices.clone(),
                     hash_mapping: None,
-                    dispatcher_id: target_fragment_id.unwrap() as u64,
+                    dispatcher_id: target_fragment_id as u64,
                     downstream_actor_id: vec![**downstream_actor_id],
                     downstream_table_name: None,
                 }],
