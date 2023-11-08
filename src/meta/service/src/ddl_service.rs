@@ -881,11 +881,13 @@ fn fill_cdc_mysql_server_id(fragment_graph: &mut PbStreamFragmentGraph) {
     for fragment in fragment_graph.fragments.values_mut() {
         visit_fragment(fragment, |node_body| {
             if let NodeBody::Source(source_node) = node_body {
-                let props = &mut source_node.source_inner.as_mut().unwrap().properties;
-                let rand_server_id = rand::thread_rng().gen_range(1..u32::MAX);
-                props
-                    .entry("server.id".to_string())
-                    .or_insert(rand_server_id.to_string());
+                if let Some(props) = &mut source_node.source_inner {
+                    let rand_server_id = rand::thread_rng().gen_range(1..u32::MAX);
+                    props
+                        .properties
+                        .entry("server.id".to_string())
+                        .or_insert(rand_server_id.to_string());
+                }
             }
         });
     }
