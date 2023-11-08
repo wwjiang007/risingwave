@@ -21,7 +21,7 @@ use itertools::Itertools;
 use maplit::{convert_args, hashmap};
 use pgwire::pg_response::{PgResponse, StatementType};
 use risingwave_common::bail;
-use risingwave_common::catalog::{ConnectionId, DatabaseId, SchemaId, UserId};
+use risingwave_common::catalog::{ColumnCatalog, ConnectionId, DatabaseId, SchemaId, UserId};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::types::DataType;
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
@@ -49,7 +49,9 @@ use crate::expr::{ExprImpl, InputRef, Literal};
 use crate::handler::create_table::{generate_table, ColumnIdGenerator};
 use crate::handler::privilege::resolve_query_privileges;
 use crate::handler::HandlerArgs;
-use crate::optimizer::plan_node::{generic, Explain, PlanTreeNodeUnary, StreamProject};
+use crate::optimizer::plan_node::{
+    generic, Explain, LogicalSource, PlanTreeNodeUnary, StreamProject,
+};
 use crate::optimizer::property::{Order, RequiredDist};
 use crate::optimizer::{OptimizerContext, OptimizerContextRef, PlanRef, RelationCollectorVisitor};
 use crate::scheduler::streaming_manager::CreatingStreamingJobInfo;
@@ -407,12 +409,6 @@ pub async fn handle_create_sink(
                             .to_string(),
                     )));
                 }
-
-                let sink_plan = plan.as_stream_sink().unwrap();
-                let mut input = sink_plan.input();
-                input = RequiredDist::PhysicalDist(table_dist.unwrap())
-                    .enforce_if_not_satisfies(input, &Order::any())?;
-                plan = sink_plan.clone_with_input(input).into();
             }
 
             let sink_plan: PlanRef = {
@@ -467,7 +463,25 @@ pub async fn handle_create_sink(
 
                 let logical_project = generic::Project::new(exprs, plan);
 
-                StreamProject::new(logical_project).into()
+                let plan = StreamProject::new(logical_project).into();
+
+                let table_columns = affected_table_catalog
+                    .get_columns()
+                    .iter()
+                    .map(|col| ColumnCatalog::from(*col))
+                    .collect_vec();
+
+                let exprs = LogicalSource::derive_output_exprs_from_generated_columns(
+                    &affected_table_catalog.columns,
+                )?;
+
+                if let Some(exprs) = exprs {
+                    let logical_project = generic::Project::new(exprs, plan);
+
+                    plan = StreamProject::new(logical_project).into();
+                }
+
+                plan
             };
 
             plan = sink_plan;
@@ -483,19 +497,10 @@ pub async fn handle_create_sink(
 
         let mut graph = build_graph(plan);
 
-        if let Some(replace_table_plan) = &affected_table_change {
-            graph.parallelism = replace_table_plan
-                .fragment_graph
-                .as_ref()
-                .unwrap()
-                .parallelism
-                .clone();
-        } else {
-            graph.parallelism = session
-                .config()
-                .get_streaming_parallelism()
-                .map(|parallelism| Parallelism { parallelism });
-        }
+        graph.parallelism = session
+            .config()
+            .get_streaming_parallelism()
+            .map(|parallelism| Parallelism { parallelism });
 
         (sink, graph)
     };

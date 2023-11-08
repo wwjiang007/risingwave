@@ -429,6 +429,18 @@ impl PlanRoot {
         CardinalityVisitor.visit(self.plan.clone())
     }
 
+    pub fn inject_project_for_generated_column_if_needed(
+        columns: &[ColumnCatalog],
+        node: PlanRef,
+    ) -> Result<PlanRef> {
+        let exprs = LogicalSource::derive_output_exprs_from_generated_columns(columns)?;
+        if let Some(exprs) = exprs {
+            let logical_project = generic::Project::new(exprs, node);
+            return Ok(StreamProject::new(logical_project).into());
+        }
+        Ok(node)
+    }
+
     /// Optimize and generate a create table plan.
     #[allow(clippy::too_many_arguments)]
     pub fn gen_table_plan(
@@ -460,18 +472,6 @@ impl PlanRoot {
                 .map(|c| id_to_idx.get(c).copied().unwrap()) // pk column id must exist in table columns.
                 .collect_vec()
         };
-
-        fn inject_project_for_generated_column_if_needed(
-            columns: &[ColumnCatalog],
-            node: PlanRef,
-        ) -> Result<PlanRef> {
-            let exprs = LogicalSource::derive_output_exprs_from_generated_columns(columns)?;
-            if let Some(exprs) = exprs {
-                let logical_project = generic::Project::new(exprs, node);
-                return Ok(StreamProject::new(logical_project).into());
-            }
-            Ok(node)
-        }
 
         #[derive(PartialEq, Debug, Copy, Clone)]
         enum PrimaryKeyKind {
