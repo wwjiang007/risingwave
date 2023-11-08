@@ -83,7 +83,6 @@ async fn do_handle_explain(
                             source_watermarks,
                             ColumnIdGenerator::new_initial(),
                             append_only,
-                            0,
                         )
                         .await?
                         .0
@@ -97,7 +96,6 @@ async fn do_handle_explain(
                             ColumnIdGenerator::new_initial(),
                             source_watermarks,
                             append_only,
-                            0,
                         )?
                         .0
                     }
