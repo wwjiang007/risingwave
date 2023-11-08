@@ -62,7 +62,7 @@ pub async fn handle_drop_sink(
     let mut affected_table_change = None;
     if let Some(target_table_name) = &sink.sink_into_name {
         use anyhow::Context;
-        use risingwave_common::error::{ErrorCode, RwError};
+        use risingwave_common::error::ErrorCode;
         use risingwave_common::util::column_index_mapping::ColIndexMapping;
         use risingwave_sqlparser::ast::Statement;
         use risingwave_sqlparser::parser::Parser;
