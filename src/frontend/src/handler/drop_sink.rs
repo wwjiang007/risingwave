@@ -98,13 +98,6 @@ pub async fn handle_drop_sink(
             table.clone()
         };
 
-        // TODO(yuhao): alter table with generated columns.
-        if original_catalog.has_generated_column() {
-            return Err(RwError::from(ErrorCode::BindError(
-                "Alter a table with generated column has not been implemented.".to_string(),
-            )));
-        }
-
         // Retrieve the original table definition and parse it to AST.
         let [mut definition]: [_; 1] = Parser::parse_sql(&original_catalog.definition)
             .context("unable to parse original table definition")?
