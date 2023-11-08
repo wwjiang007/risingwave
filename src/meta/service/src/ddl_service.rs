@@ -940,4 +940,3 @@ fn fill_table_stream_graph_info(
             }
         });
     }
-}
