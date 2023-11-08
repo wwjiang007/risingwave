@@ -131,7 +131,7 @@ pub async fn handle_drop_sink(
             panic!("unexpected statement type: {:?}", definition);
         };
 
-        let (graph, table, source, _) = generate_table(
+        let (graph, table, source) = generate_table(
             &session,
             table_name,
             &original_catalog,
@@ -142,7 +142,6 @@ pub async fn handle_drop_sink(
             constraints,
             source_watermarks,
             append_only,
-            0,
         )
         .await?;
 

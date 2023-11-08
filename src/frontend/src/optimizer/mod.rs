@@ -443,7 +443,6 @@ impl PlanRoot {
         watermark_descs: Vec<WatermarkDesc>,
         version: Option<TableVersion>,
         with_external_source: bool,
-        with_external_sinks: i32,
     ) -> Result<StreamMaterialize> {
         let stream_plan = self.gen_optimized_stream_plan(false)?;
 
@@ -523,7 +522,7 @@ impl PlanRoot {
             .map(|c| c.column_desc.clone())
             .collect();
 
-        let mut union_inputs = if with_external_source {
+        let union_inputs = if with_external_source {
             let mut external_source_node = stream_plan;
             external_source_node =
                 inject_project_for_generated_column_if_needed(&columns, external_source_node)?;
@@ -573,36 +572,6 @@ impl PlanRoot {
 
             vec![dml_node]
         };
-
-        for _ in 0..with_external_sinks {
-            let mut dummy_source_node = LogicalSource::new(
-                None,
-                columns.clone(),
-                row_id_index,
-                false,
-                true,
-                context.clone(),
-            )
-            .and_then(|s| s.to_stream(&mut ToStreamContext::new(false)))?;
-
-            dummy_source_node =
-                inject_project_for_generated_column_if_needed(&columns, dummy_source_node)?;
-
-            match kind {
-                PrimaryKeyKind::UserDefinedPrimaryKey => {
-                    dummy_source_node = RequiredDist::hash_shard(&pk_column_indices)
-                        .enforce_if_not_satisfies(dummy_source_node, &Order::any())?
-                }
-                PrimaryKeyKind::RowIdAsPrimaryKey => {
-                    dummy_source_node = StreamExchange::new_no_shuffle(dummy_source_node).into()
-                }
-                PrimaryKeyKind::AppendOnly => {
-                    dummy_source_node = StreamExchange::new_no_shuffle(dummy_source_node).into()
-                }
-            }
-
-            union_inputs.push(dummy_source_node);
-        }
 
         let mut stream_plan = StreamUnion::new(Union {
             all: true,

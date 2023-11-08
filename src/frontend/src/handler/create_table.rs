@@ -56,9 +56,8 @@ use crate::handler::create_source::{
     check_source_schema, validate_compatibility, UPSTREAM_SOURCE_KEY,
 };
 use crate::handler::HandlerArgs;
-use crate::optimizer::plan_node::generic::PhysicalPlanRef;
 use crate::optimizer::plan_node::{LogicalScan, LogicalSource};
-use crate::optimizer::property::{Distribution, Order, RequiredDist};
+use crate::optimizer::property::{Order, RequiredDist};
 use crate::optimizer::{OptimizerContext, OptimizerContextRef, PlanRef, PlanRoot};
 use crate::session::{CheckRelationError, SessionImpl};
 use crate::stream_fragmenter::build_graph;
@@ -467,7 +466,6 @@ pub(crate) async fn gen_create_table_plan_with_source(
     source_watermarks: Vec<SourceWatermark>,
     mut col_id_gen: ColumnIdGenerator,
     append_only: bool,
-    with_external_sinks: i32,
 ) -> Result<(PlanRef, Option<PbSource>, PbTable)> {
     if append_only
         && source_schema.format != Format::Plain
@@ -591,7 +589,6 @@ pub(crate) async fn gen_create_table_plan_with_source(
         Some(cdc_table_type),
         append_only,
         Some(col_id_gen.into_version()),
-        with_external_sinks,
     )
 }
 
@@ -605,7 +602,6 @@ pub(crate) fn gen_create_table_plan(
     mut col_id_gen: ColumnIdGenerator,
     source_watermarks: Vec<SourceWatermark>,
     append_only: bool,
-    with_external_sinks: i32,
 ) -> Result<(PlanRef, Option<PbSource>, PbTable)> {
     let definition = context.normalized_sql().to_owned();
     let mut columns = bind_sql_columns(&column_defs)?;
@@ -624,7 +620,6 @@ pub(crate) fn gen_create_table_plan(
         source_watermarks,
         append_only,
         Some(col_id_gen.into_version()),
-        with_external_sinks,
     )
 }
 
@@ -640,7 +635,6 @@ pub(crate) fn gen_create_table_plan_without_bind(
     source_watermarks: Vec<SourceWatermark>,
     append_only: bool,
     version: Option<TableVersion>,
-    with_external_sinks: i32,
 ) -> Result<(PlanRef, Option<PbSource>, PbTable)> {
     ensure_table_constraints_supported(&constraints)?;
     let pk_names = bind_sql_pk_names(&column_defs, &constraints)?;
@@ -674,7 +668,6 @@ pub(crate) fn gen_create_table_plan_without_bind(
         None,
         append_only,
         version,
-        with_external_sinks,
     )
 }
 
@@ -693,7 +686,6 @@ fn gen_table_plan_inner(
     append_only: bool,
     version: Option<TableVersion>, /* TODO: this should always be `Some` if we support `ALTER
                                     * TABLE` for `CREATE TABLE AS`. */
-    with_external_sinks: i32,
 ) -> Result<(PlanRef, Option<PbSource>, PbTable)> {
     let session = context.session_ctx().clone();
     let db_name = session.database();
@@ -787,7 +779,6 @@ fn gen_table_plan_inner(
         watermark_descs,
         version,
         is_external_source,
-        with_external_sinks,
     )?;
 
     let mut table = materialize.table().to_prost(schema_id, database_id);
@@ -898,7 +889,6 @@ fn gen_create_table_plan_for_cdc_source(
         vec![],
         Some(col_id_gen.into_version()),
         true,
-        0,
     )?;
 
     let mut table = materialize.table().to_prost(schema_id, database_id);
@@ -996,7 +986,6 @@ pub async fn handle_create_table(
                     source_watermarks,
                     col_id_gen,
                     append_only,
-                    0,
                 )
                 .await?,
                 TableJobType::General,
@@ -1010,7 +999,6 @@ pub async fn handle_create_table(
                     col_id_gen,
                     source_watermarks,
                     append_only,
-                    0,
                 )?,
                 TableJobType::General,
             ),
@@ -1081,8 +1069,7 @@ pub async fn generate_table(
     constraints: Vec<TableConstraint>,
     source_watermarks: Vec<SourceWatermark>,
     append_only: bool,
-    with_external_sink: i32,
-) -> Result<(StreamFragmentGraph, Table, Option<PbSource>, Distribution)> {
+) -> Result<(StreamFragmentGraph, Table, Option<PbSource>)> {
     use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
 
     let context = OptimizerContext::from_handler_args(handler_args);
@@ -1097,7 +1084,6 @@ pub async fn generate_table(
                 source_watermarks,
                 col_id_gen,
                 append_only,
-                with_external_sink,
             )
             .await?
         }
@@ -1109,11 +1095,8 @@ pub async fn generate_table(
             col_id_gen,
             source_watermarks,
             append_only,
-            with_external_sink,
         )?,
     };
-
-    let dist = plan.distribution().to_owned();
 
     // TODO: avoid this backward conversion.
     if TableCatalog::from(&table).pk_column_ids() != original_catalog.pk_column_ids() {
@@ -1139,7 +1122,7 @@ pub async fn generate_table(
         ..table
     };
 
-    Ok((graph, table, source, dist))
+    Ok((graph, table, source))
 }
 
 #[cfg(test)]
