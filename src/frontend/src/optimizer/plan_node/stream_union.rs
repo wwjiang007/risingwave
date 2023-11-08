@@ -40,19 +40,6 @@ impl StreamUnion {
         let inputs = &core.inputs;
         let dist = inputs[0].distribution().clone();
         assert!(inputs.iter().all(|input| *input.distribution() == dist));
-        Self::new_with_dist(logical, dist)
-    }
-
-    pub fn new_with_dist(core: Union<PlanRef>, dist: Distribution) -> StreamUnion {
-        let inputs = &core.inputs;
-        for input in inputs {
-            println!(
-                "{} -> {}",
-                input.explain_myself_to_string(),
-                input.distribution()
-            );
-        }
-
         let watermark_columns = inputs.iter().fold(
             {
                 let mut bitset = FixedBitSet::with_capacity(core.schema().len());
