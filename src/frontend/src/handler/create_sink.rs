@@ -443,8 +443,6 @@ pub async fn handle_create_sink(
 
         table.incoming_sinks = table_catalog.incoming_sinks.clone();
 
-
-
         // Calculate the mapping from the original columns to the new columns.
         let col_index_mapping = ColIndexMapping::new(
             table_catalog

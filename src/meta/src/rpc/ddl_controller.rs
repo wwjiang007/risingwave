@@ -617,7 +617,6 @@ impl DdlController {
 
         println!("meta recv incoming {:?}", table.incoming_sinks);
 
-
         let [table_catalog]: [_; 1] = self
             .catalog_manager
             .get_tables(&[table.id])
@@ -630,8 +629,6 @@ impl DdlController {
 
         let sink_fragment = sink_table_fragments.sink_fragment().unwrap();
 
-        println!("handling new sink {}", sink_fragment.fragment_id);
-
         Self::inject_replace_table_plan_for_sink(
             &sink_fragment,
             table,
@@ -643,7 +640,6 @@ impl DdlController {
         let guard = self.fragment_manager.get_fragment_read_guard().await;
 
         for sink_id in &table_catalog.incoming_sinks {
-            println!("handling sink {}", sink_id);
             let table_fragments = guard
                 .table_fragments()
                 .get(&catalog::TableId::new(*sink_id))
@@ -659,6 +655,8 @@ impl DdlController {
                 target_fragment_id,
             );
         }
+
+        println!("dispatchers {:#?}", replace_table_ctx.dispatchers);
 
         Ok(ReplaceTableJob {
             context: replace_table_ctx,
@@ -743,17 +741,8 @@ impl DdlController {
 
                 visit_stream_node_1(node, |node| {
                     if let Some(NodeBody::Union(_)) = &mut node.node_body {
-                        // for input in &node.input {
-                        //     println!("input {}", input.identity);
-                        //     if let Some(NodeBody::Merge(merge_node)) = &input.node_body {
-                        //         println!("\t merge {:?}", merge_node);
-                        //     }
-                        // }
-                        println!("--------- total {}", node.input.len());
-
                         for input in &mut node.input {
                             if let Some(NodeBody::Merge(merge_node)) = &mut input.node_body && merge_node.upstream_actor_id.is_empty() {
-                                println!("injecting replace table plan for sink {}", sink_fragment.fragment_id);
                                 *merge_node = MergeNode {
                                     upstream_actor_id: sink_actor_ids.clone(),
                                     upstream_fragment_id,
