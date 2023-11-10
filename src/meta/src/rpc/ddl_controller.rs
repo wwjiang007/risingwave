@@ -615,8 +615,6 @@ impl DdlController {
 
         let table = table_stream_job.table().unwrap();
 
-        println!("meta recv incoming {:?}", table.incoming_sinks);
-
         let [table_catalog]: [_; 1] = self
             .catalog_manager
             .get_tables(&[table.id])
@@ -655,8 +653,6 @@ impl DdlController {
                 target_fragment_id,
             );
         }
-
-        println!("dispatchers {:#?}", replace_table_ctx.dispatchers);
 
         Ok(ReplaceTableJob {
             context: replace_table_ctx,

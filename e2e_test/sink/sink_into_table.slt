@@ -12,8 +12,8 @@ create table m_simple (v1 int primary key, v2 int);
 statement ok
 create sink s_simple_1 into m_simple as select v1, v2 from t_simple;
 
-statement error Create sink into table with incoming sinks has not been implemented.
-create sink s_simple_2 into m_simple as select v1, v2 from t_simple;
+# statement error Create sink into table with incoming sinks has not been implemented.
+# create sink s_simple_2 into m_simple as select v1, v2 from t_simple;
 
 # and we can't alter a table with incoming sinks
 statement error Alter a table with incoming sinks has not been implemented.
@@ -347,3 +347,35 @@ drop table t_b;
 
 statement ok
 drop table t_c;
+
+# multi sinks
+
+statement ok
+create table t_l(v int primary key);
+
+statement ok
+insert into t_l values (1), (2), (3);
+
+statement ok
+create table t_r(v int primary key);
+
+statement ok
+insert into t_r values (3), (4), (5);
+
+statement ok
+create table t_m(v int primary key);
+
+statement ok
+create sink s_l into t_m as select v from t_l;
+
+statement ok
+create sink s_r into t_m as select v from t_r;
+
+query I rowsort
+select * from t_m order by v;
+----
+1
+2
+3
+4
+5

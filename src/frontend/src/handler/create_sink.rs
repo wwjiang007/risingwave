@@ -428,9 +428,6 @@ pub async fn handle_create_sink(
             }
         }
 
-
-        println!("incoming {:?}", table_catalog.incoming_sinks.len());
-
         for _ in 0..(table_catalog.incoming_sinks.len() + 1) {
             for fragment in graph.fragments.values_mut() {
                 if let Some(node) = &mut fragment.node {
