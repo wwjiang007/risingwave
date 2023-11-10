@@ -354,11 +354,11 @@ pub async fn handle_create_sink(
 
     let mut target_table_replace_plan = None;
     if let Some(table_catalog) = target_table_catalog {
-        if !table_catalog.incoming_sinks.is_empty() {
-            return Err(RwError::from(ErrorCode::BindError(
-                "Create sink into table with incoming sinks has not been implemented.".to_string(),
-            )));
-        }
+        // if !table_catalog.incoming_sinks.is_empty() {
+        //     return Err(RwError::from(ErrorCode::BindError(
+        //         "Create sink into table with incoming sinks has not been implemented.".to_string(),
+        //     )));
+        // }
 
         if check_cycle_for_sink(session.as_ref(), sink.clone(), table_catalog.id())? {
             return Err(RwError::from(ErrorCode::BindError(
@@ -428,11 +428,22 @@ pub async fn handle_create_sink(
             }
         }
 
-        for fragment in graph.fragments.values_mut() {
-            if let Some(node) = &mut fragment.node {
-                insert_merger_to_union(node);
+
+        println!("incoming {:?}", table_catalog.incoming_sinks.len());
+
+        for _ in 0..(table_catalog.incoming_sinks.len() + 1) {
+            for fragment in graph.fragments.values_mut() {
+                if let Some(node) = &mut fragment.node {
+                    insert_merger_to_union(node);
+                }
             }
         }
+
+        let mut table = table.clone();
+
+        table.incoming_sinks = table_catalog.incoming_sinks.clone();
+
+
 
         // Calculate the mapping from the original columns to the new columns.
         let col_index_mapping = ColIndexMapping::new(

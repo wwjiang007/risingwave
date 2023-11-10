@@ -19,11 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use itertools::Itertools;
+use risingwave_common::catalog;
 use risingwave_common::config::DefaultParallelism;
 use risingwave_common::hash::{ParallelUnitMapping, VirtualNode};
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
 use risingwave_common::util::epoch::Epoch;
-use risingwave_common::util::stream_graph_visitor::visit_stream_node;
+use risingwave_common::util::stream_graph_visitor::{visit_stream_node, visit_stream_node_1};
 use risingwave_pb::catalog::connection::private_link_service::PbPrivateLinkProvider;
 use risingwave_pb::catalog::{
     connection, Comment, Connection, CreateType, Database, Function, Schema, Source, Table, View,
@@ -31,6 +32,7 @@ use risingwave_pb::catalog::{
 use risingwave_pb::ddl_service::alter_owner_request::Object;
 use risingwave_pb::ddl_service::alter_relation_name_request::Relation;
 use risingwave_pb::ddl_service::DdlProgress;
+use risingwave_pb::meta::table_fragments::PbFragment;
 use risingwave_pb::stream_plan::stream_node::NodeBody;
 use risingwave_pb::stream_plan::{
     Dispatcher, DispatcherType, MergeNode, StreamFragmentGraph as StreamFragmentGraphProto,
@@ -47,7 +49,7 @@ use crate::manager::{
     SchemaId, SinkId, SourceId, StreamingClusterInfo, StreamingJob, TableId, UserId, ViewId,
     IGNORED_NOTIFICATION_VERSION,
 };
-use crate::model::{StreamEnvironment, TableFragments};
+use crate::model::{FragmentId, StreamEnvironment, TableFragments};
 use crate::rpc::cloud_provider::AwsEc2Client;
 use crate::stream::{
     validate_sink, ActorGraphBuildResult, ActorGraphBuilder, CompleteStreamFragmentGraph,
@@ -588,14 +590,6 @@ impl DdlController {
             .prepare_replace_table(table_stream_job, table_fragment_graph)
             .await?;
 
-        let sink_fragment = sink_table_fragments.sink_fragment().unwrap();
-
-        let sink_actor_ids = sink_fragment
-            .actors
-            .iter()
-            .map(|a| a.actor_id)
-            .collect_vec();
-
         let (mut replace_table_ctx, mut replace_table_table_fragments) = self
             .build_replace_table(
                 env.clone(),
@@ -619,12 +613,73 @@ impl DdlController {
             }
         }
 
+        let table = table_stream_job.table().unwrap();
+
+        println!("meta recv incoming {:?}", table.incoming_sinks);
+
+
+        let [table_catalog]: [_; 1] = self
+            .catalog_manager
+            .get_tables(&[table.id])
+            .await
+            .try_into()
+            .unwrap();
+
         let target_fragment_id =
             target_fragment_id.expect("fragment of placeholder merger not found");
 
-        let table = table_stream_job.table().unwrap();
+        let sink_fragment = sink_table_fragments.sink_fragment().unwrap();
 
-        let union_fragment = replace_table_table_fragments
+        println!("handling new sink {}", sink_fragment.fragment_id);
+
+        Self::inject_replace_table_plan_for_sink(
+            &sink_fragment,
+            table,
+            &mut replace_table_ctx,
+            &mut replace_table_table_fragments,
+            target_fragment_id,
+        );
+
+        let guard = self.fragment_manager.get_fragment_read_guard().await;
+
+        for sink_id in &table_catalog.incoming_sinks {
+            println!("handling sink {}", sink_id);
+            let table_fragments = guard
+                .table_fragments()
+                .get(&catalog::TableId::new(*sink_id))
+                .unwrap();
+
+            let sink_fragment = table_fragments.sink_fragment().unwrap();
+
+            Self::inject_replace_table_plan_for_sink(
+                &sink_fragment,
+                table,
+                &mut replace_table_ctx,
+                &mut replace_table_table_fragments,
+                target_fragment_id,
+            );
+        }
+
+        Ok(ReplaceTableJob {
+            context: replace_table_ctx,
+            table_fragments: replace_table_table_fragments,
+        })
+    }
+
+    fn inject_replace_table_plan_for_sink(
+        sink_fragment: &PbFragment,
+        table: &Table,
+        replace_table_ctx: &mut ReplaceTableContext,
+        target_table_fragments: &mut TableFragments,
+        target_fragment_id: FragmentId,
+    ) {
+        let sink_actor_ids = sink_fragment
+            .actors
+            .iter()
+            .map(|a| a.actor_id)
+            .collect_vec();
+
+        let union_fragment = target_table_fragments
             .fragments
             .get(&target_fragment_id)
             .unwrap();
@@ -647,7 +702,7 @@ impl DdlController {
         let mapping = downstream_actor_ids
             .iter()
             .map(|id| {
-                let actor_status = replace_table_table_fragments.actor_status.get(id).unwrap();
+                let actor_status = target_table_fragments.actor_status.get(id).unwrap();
                 let parallel_unit_id = actor_status.parallel_unit.as_ref().unwrap().id;
 
                 (parallel_unit_id, *id)
@@ -675,7 +730,7 @@ impl DdlController {
             );
         }
 
-        let union_fragment = replace_table_table_fragments
+        let union_fragment = target_table_fragments
             .fragments
             .get_mut(&target_fragment_id)
             .unwrap();
@@ -686,23 +741,34 @@ impl DdlController {
             if let Some(node) = &mut actor.nodes {
                 let fields = node.fields.clone();
 
-                visit_stream_node(node, |body| {
-                    if let NodeBody::Merge(merge_node) = body && merge_node.upstream_actor_id.is_empty() {
-                        *merge_node = MergeNode {
-                            upstream_actor_id: sink_actor_ids.clone(),
-                            upstream_fragment_id,
-                            upstream_dispatcher_type: DispatcherType::Hash as _,
-                            fields: fields.clone()
-                        };
+                visit_stream_node_1(node, |node| {
+                    if let Some(NodeBody::Union(_)) = &mut node.node_body {
+                        // for input in &node.input {
+                        //     println!("input {}", input.identity);
+                        //     if let Some(NodeBody::Merge(merge_node)) = &input.node_body {
+                        //         println!("\t merge {:?}", merge_node);
+                        //     }
+                        // }
+                        println!("--------- total {}", node.input.len());
+
+                        for input in &mut node.input {
+                            if let Some(NodeBody::Merge(merge_node)) = &mut input.node_body && merge_node.upstream_actor_id.is_empty() {
+                                println!("injecting replace table plan for sink {}", sink_fragment.fragment_id);
+                                *merge_node = MergeNode {
+                                    upstream_actor_id: sink_actor_ids.clone(),
+                                    upstream_fragment_id,
+                                    upstream_dispatcher_type: DispatcherType::Hash as _,
+                                    fields: fields.clone(),
+                                };
+
+                                return false;
+                            }
+                        }
                     }
-                })
+                    true
+                });
             }
         }
-
-        Ok(ReplaceTableJob {
-            context: replace_table_ctx,
-            table_fragments: replace_table_table_fragments,
-        })
     }
 
     // We persist table fragments at this step.
