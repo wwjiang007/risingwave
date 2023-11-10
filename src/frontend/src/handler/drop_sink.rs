@@ -22,6 +22,7 @@ use risingwave_sqlparser::ast::ObjectName;
 use super::RwPgResponse;
 use crate::binder::Binder;
 use crate::catalog::root_catalog::SchemaPath;
+use crate::handler::create_sink::insert_merger_to_union;
 use crate::handler::create_table::generate_stream_graph_for_table;
 use crate::handler::HandlerArgs;
 
@@ -111,7 +112,7 @@ pub async fn handle_drop_sink(
             panic!("unexpected statement type: {:?}", definition);
         };
 
-        let (graph, table, source) = generate_stream_graph_for_table(
+        let (mut graph, mut table, source) = generate_stream_graph_for_table(
             &session,
             table_name,
             &table_catalog,
@@ -124,6 +125,18 @@ pub async fn handle_drop_sink(
             append_only,
         )
         .await?;
+
+        table.incoming_sinks = table_catalog.incoming_sinks.clone();
+
+        assert!(!table_catalog.incoming_sinks.is_empty());
+
+        for _ in 0..(table_catalog.incoming_sinks.len() - 1) {
+            for fragment in graph.fragments.values_mut() {
+                if let Some(node) = &mut fragment.node {
+                    insert_merger_to_union(node);
+                }
+            }
+        }
 
         // Calculate the mapping from the original columns to the new columns.
         let col_index_mapping = ColIndexMapping::new(
