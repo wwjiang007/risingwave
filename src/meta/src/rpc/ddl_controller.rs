@@ -870,6 +870,16 @@ impl DdlController {
             col_index_mapping,
         }) = target_replace_info
         {
+            self.fragment_manager.
+
+            Self::inject_replace_table_plan_for_sink(
+                &sink_fragment,
+                table,
+                &mut replace_table_ctx,
+                &mut replace_table_table_fragments,
+                target_fragment_id,
+            );
+
             self.replace_table(streaming_job, fragment_graph, col_index_mapping)
                 .await?;
         }

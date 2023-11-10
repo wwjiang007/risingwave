@@ -408,26 +408,6 @@ pub async fn handle_create_sink(
 
         table.incoming_sinks = table_catalog.incoming_sinks.clone();
 
-        fn insert_merger_to_union(node: &mut StreamNode) {
-            if let Some(NodeBody::Union(_union_node)) = &mut node.node_body {
-                node.input.push(StreamNode {
-                    identity: "Merge (sink into table)".to_string(),
-                    fields: node.fields.clone(),
-                    node_body: Some(NodeBody::Merge(MergeNode {
-                        upstream_dispatcher_type: DispatcherType::Hash as _,
-                        ..Default::default()
-                    })),
-                    ..Default::default()
-                });
-
-                return;
-            }
-
-            for input in &mut node.input {
-                insert_merger_to_union(input);
-            }
-        }
-
         for _ in 0..(table_catalog.incoming_sinks.len() + 1) {
             for fragment in graph.fragments.values_mut() {
                 if let Some(node) = &mut fragment.node {
@@ -435,10 +415,6 @@ pub async fn handle_create_sink(
                 }
             }
         }
-
-        let mut table = table.clone();
-
-        table.incoming_sinks = table_catalog.incoming_sinks.clone();
 
         // Calculate the mapping from the original columns to the new columns.
         let col_index_mapping = ColIndexMapping::new(
@@ -481,6 +457,25 @@ pub async fn handle_create_sink(
     Ok(PgResponse::empty_result(StatementType::CREATE_SINK))
 }
 
+pub(crate) fn insert_merger_to_union(node: &mut StreamNode) {
+    if let Some(NodeBody::Union(_union_node)) = &mut node.node_body {
+        node.input.push(StreamNode {
+            identity: "Merge (sink into table)".to_string(),
+            fields: node.fields.clone(),
+            node_body: Some(NodeBody::Merge(MergeNode {
+                upstream_dispatcher_type: DispatcherType::Hash as _,
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+
+        return;
+    }
+
+    for input in &mut node.input {
+        insert_merger_to_union(input);
+    }
+}
 fn derive_default_column_project_for_sink(
     sink: &SinkCatalog,
     target_table_catalog: &Arc<TableCatalog>,
