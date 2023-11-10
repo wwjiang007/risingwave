@@ -438,7 +438,7 @@ mod test {
             format_desc: None,
             db_name: "test".into(),
             sink_from_name: "test".into(),
-            sink_into_name: None,
+            target_table: None,
         };
 
         let sink_executor = SinkExecutor::new(
@@ -560,7 +560,7 @@ mod test {
             format_desc: None,
             db_name: "test".into(),
             sink_from_name: "test".into(),
-            sink_into_name: None,
+            target_table: None,
         };
 
         let sink_executor = SinkExecutor::new(
@@ -679,7 +679,7 @@ mod test {
             format_desc: None,
             db_name: "test".into(),
             sink_from_name: "test".into(),
-            sink_into_name: None,
+            target_table: None,
         };
 
         let sink_executor = SinkExecutor::new(

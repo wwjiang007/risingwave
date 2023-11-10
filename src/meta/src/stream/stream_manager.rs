@@ -649,10 +649,10 @@ impl GlobalStreamManager {
             .await
         {
             tracing::warn!(
-        "Failed to unregister compaction group for {:#?}. They will be cleaned up on node restart. {:#?}",
-        table_fragments_vec,
-        e
-        );
+                "Failed to unregister compaction group for {:#?}. They will be cleaned up on node restart. {:#?}",
+                table_fragments_vec,
+                e
+            );
         }
 
         Ok(())
