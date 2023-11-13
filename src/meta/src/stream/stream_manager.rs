@@ -32,7 +32,6 @@ use uuid::Uuid;
 use super::{
     Locations, ParallelUnitReschedule, RescheduleOptions, ScaleController, ScaleControllerRef,
 };
-
 use crate::barrier::{BarrierScheduler, Command, ReplaceTableCommand};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{ClusterManagerRef, FragmentManagerRef, MetaSrvEnv};
