@@ -14,6 +14,10 @@
 
 package com.risingwave.connector.source.core;
 
+import com.risingwave.connector.FlinkDynamicSourceFactory;
+import com.risingwave.connector.FlinkDynamicSourceHandleConfig;
+import com.risingwave.connector.FlinkSource;
+import com.risingwave.connector.SourceContextImpl;
 import com.risingwave.connector.api.source.SourceTypeE;
 import com.risingwave.connector.source.common.DbzConnectorConfig;
 import com.risingwave.java.binding.Binding;
@@ -22,6 +26,11 @@ import com.risingwave.proto.ConnectorServiceProto;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.flink.streaming.api.functions.source.SourceFunction;
+import org.apache.kafka.connect.json.JsonConverterConfig;
+import org.apache.kafka.connect.storage.ConverterConfig;
+import org.apache.kafka.connect.storage.ConverterType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +39,8 @@ public class JniDbzSourceHandler {
     static final Logger LOG = LoggerFactory.getLogger(DbzSourceHandler.class);
 
     private final DbzConnectorConfig config;
+
+    static FlinkSourceHandler handler;
 
     public JniDbzSourceHandler(DbzConnectorConfig config) {
         this.config = config;
@@ -46,15 +57,21 @@ public class JniDbzSourceHandler {
         // userProps extracted from request, underlying implementation is UnmodifiableMap
         Map<String, String> mutableUserProps = new HashMap<>(request.getPropertiesMap());
         mutableUserProps.put("source.id", Long.toString(request.getSourceId()));
-        var config =
-                new DbzConnectorConfig(
-                        SourceTypeE.valueOf(request.getSourceType()),
-                        request.getSourceId(),
-                        request.getStartOffset(),
-                        mutableUserProps,
-                        request.getSnapshotDone());
-        JniDbzSourceHandler handler = new JniDbzSourceHandler(config);
-        handler.start(channelPtr);
+
+        if (SourceTypeE.valueOf(request.getSourceType()).isDecimal()){
+            handler = new JniDbzSourceHandler(new FlinkDynamicSourceHandleConfig());
+
+        }else{
+            var config =
+                    new DbzConnectorConfig(
+                            SourceTypeE.valueOf(request.getSourceType()),
+                            request.getSourceId(),
+                            request.getStartOffset(),
+                            mutableUserProps,
+                            request.getSnapshotDone());
+            JniDbzSourceHandler handler = new JniDbzSourceHandler(config);
+            handler.start(channelPtr);
+        }
     }
 
     public void start(long channelPtr) {

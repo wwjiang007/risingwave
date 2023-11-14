@@ -162,6 +162,7 @@ enum SourceType {
   MYSQL = 1;
   POSTGRES = 2;
   CITUS = 3;
+  DYNAMIC = 4;
 }
 
 message GetEventStreamRequest {
@@ -235,4 +236,27 @@ message CoordinateResponse {
 
 service SinkCoordinationService {
   rpc Coordinate(stream CoordinateRequest) returns (stream CoordinateResponse);
+}
+
+message DynamicMessage {
+  string payload = 1;
+  string partition = 2;
+}
+
+
+message GetDynamicEventStreamRequest {
+  uint64 source_id = 1;
+  SourceType source_type = 2;
+  string start_state = 3;
+  map<string, string> properties = 4;
+  TableSchema table_schema = 5;
+}
+
+message GetDynamicEventStreamResponse {
+  message ControlInfo {
+    bool handshake_ok = 1;
+  }
+  uint64 source_id = 1;
+  repeated DynamicMessage events = 2;
+  ControlInfo control = 3;
 }

@@ -20,7 +20,9 @@ public enum SourceTypeE {
     MYSQL,
     POSTGRES,
     CITUS,
-    INVALID;
+    INVALID,
+
+    DECIMAL;
 
     public static SourceTypeE valueOf(ConnectorServiceProto.SourceType type) {
         switch (type) {
@@ -30,8 +32,19 @@ public enum SourceTypeE {
                 return SourceTypeE.POSTGRES;
             case CITUS:
                 return SourceTypeE.CITUS;
+//            case DECIMAL:
+//                return SourceTypeE.DECIMAL;
             default:
                 return SourceTypeE.INVALID;
+        }
+    }
+
+    public boolean isDecimal() {
+        switch (this) {
+            case DECIMAL:
+                return true;
+            default:
+                return false;
         }
     }
 }

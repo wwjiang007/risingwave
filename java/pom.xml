@@ -52,6 +52,7 @@
         <module>connector-node/risingwave-source-cdc</module>
         <module>connector-node/risingwave-connector-test</module>
         <module>connector-node/risingwave-connector-service</module>
+        <module>connector-node/risingwave-source-dynamic</module>
         <module>connector-node/assembly</module>
         <module>connector-node/s3-common</module>
     </modules>
