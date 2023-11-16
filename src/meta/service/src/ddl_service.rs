@@ -610,19 +610,11 @@ impl DdlService for DdlServiceImpl {
     ) -> Result<Response<ReplaceTablePlanResponse>, Status> {
         let req = request.into_inner().get_plan().cloned()?;
 
-        let ReplaceTableInfo {
-            streaming_job,
-            fragment_graph,
-            col_index_mapping,
-        } = Self::extract_replace_table_info(req);
-
         let version = self
             .ddl_controller
-            .run_command(DdlCommand::ReplaceTable(
-                streaming_job,
-                fragment_graph,
-                col_index_mapping,
-            ))
+            .run_command(DdlCommand::ReplaceTable(Self::extract_replace_table_info(
+                req,
+            )))
             .await?;
 
         Ok(Response::new(ReplaceTablePlanResponse {

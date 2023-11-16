@@ -91,6 +91,7 @@ impl StreamingJobId {
     }
 }
 
+/// It’s used to describe the information of the table that needs to be replaced and it will be used during `ReplaceTable` and `CreateSink`/`DropSink` operations.
 pub struct ReplaceTableInfo {
     pub streaming_job: StreamingJob,
     pub fragment_graph: StreamFragmentGraphProto,
@@ -115,7 +116,7 @@ pub enum DdlCommand {
         Option<ReplaceTableInfo>,
     ),
     DropStreamingJob(StreamingJobId, DropMode, Option<ReplaceTableInfo>),
-    ReplaceTable(StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
+    ReplaceTable(ReplaceTableInfo),
     AlterRelationName(Relation, String),
     AlterSourceColumn(Source),
     AlterTableOwner(Object, UserId),
@@ -276,8 +277,12 @@ impl DdlController {
                     ctrl.drop_streaming_job(job_id, drop_mode, target_replace_info)
                         .await
                 }
-                DdlCommand::ReplaceTable(stream_job, fragment_graph, table_col_index_mapping) => {
-                    ctrl.replace_table(stream_job, fragment_graph, table_col_index_mapping)
+                DdlCommand::ReplaceTable(ReplaceTableInfo {
+                    streaming_job,
+                    fragment_graph,
+                    col_index_mapping,
+                }) => {
+                    ctrl.replace_table(streaming_job, fragment_graph, col_index_mapping)
                         .await
                 }
                 DdlCommand::AlterRelationName(relation, name) => {
