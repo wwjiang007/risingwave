@@ -2480,8 +2480,7 @@ impl CatalogManager {
         // TODO: Here we reuse the `creation` tracker for `alter` procedure, as an `alter` must
         // occur after it's created. We may need to add a new tracker for `alter` procedure.
         if database_core.has_in_progress_creation(&key) {
-            // bail!("table is in altering procedure");
-            Ok(())
+            bail!("table is in altering procedure");
         } else {
             if let Some(source) = source {
                 let source_key = (source.database_id, source.schema_id, source.name.clone());

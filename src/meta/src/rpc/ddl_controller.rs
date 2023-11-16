@@ -626,7 +626,7 @@ impl DdlController {
 
         let union_fragment = replace_table_table_fragments
             .fragments
-            .get(&target_fragment_id)
+            .get_mut(&target_fragment_id)
             .unwrap();
 
         let downstream_actor_ids = union_fragment
@@ -674,11 +674,6 @@ impl DdlController {
                 }],
             );
         }
-
-        let union_fragment = replace_table_table_fragments
-            .fragments
-            .get_mut(&target_fragment_id)
-            .unwrap();
 
         let upstream_fragment_id = sink_fragment.fragment_id;
 
