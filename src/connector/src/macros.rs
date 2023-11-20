@@ -44,7 +44,7 @@ macro_rules! for_all_classified_sources {
 #[macro_export]
 macro_rules! for_all_sources_inner {
     (
-        {$({ $cdc_source_type:ident }),* },
+        { $({ $cdc_source_type:ident }),* },
         { $({ $source_variant:ident, $prop_name:ty, $split:ty }),* },
         $macro:tt $(, $extra_args:tt)*
     ) => {
@@ -193,6 +193,7 @@ macro_rules! dispatch_source_prop {
 #[macro_export]
 macro_rules! impl_connector_properties {
     ({$({ $variant_name:ident, $prop_name:ty, $split:ty}),*}) => {
+        /// Properties specified in the `WITH` clause.
         #[derive(Clone, Debug)]
         pub enum ConnectorProperties {
             $(

@@ -65,6 +65,7 @@ pub trait SourceProperties: TryFromHashmap + Clone {
     type SplitEnumerator: SplitEnumerator<Properties = Self, Split = Self::Split>;
     type SplitReader: SplitReader<Split = Self::Split, Properties = Self>;
 
+    /// Currently only `CdcProperties`
     fn init_from_pb_source(&mut self, _source: &PbSource) {}
 }
 
