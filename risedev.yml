@@ -20,20 +20,22 @@ profile:
     # config-path: src/config/example.toml
     steps:
       # If you want to use the local s3 storage, enable the following line
-      # - use: minio
+      - use: minio
 
       # If you want to use aws-s3, configure AK and SK in env var and enable the following lines:
       # - use: aws-s3
       #   bucket: test-bucket
+      # - use: aws-s3
+      #   bucket: shunjie-test-bucket
 
       # if you want to enable etcd backend, uncomment the following lines.
-      # - use: etcd
-      #   unsafe-no-fsync: true
+      - use: etcd
+        unsafe-no-fsync: true
 
       # If you want to enable metrics or tracing, uncomment the following lines.
-      # - use: prometheus  # metrics
+      - use: prometheus  # metrics
       # - use: tempo       # tracing
-      # - use: grafana     # visualization
+      - use: grafana     # visualization
 
       - use: meta-node
       - use: compute-node
