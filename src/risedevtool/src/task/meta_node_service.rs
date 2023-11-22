@@ -144,12 +144,12 @@ impl MetaNodeService {
             }
         }
 
-        let provide_compactor = config.provide_compactor.as_ref().unwrap();
-        if is_shared_backend && provide_compactor.is_empty() {
-            return Err(anyhow!(
-                "When using a shared backend (minio, aws-s3, or shared in-memory with `risedev playground`), at least one compactor is required. Consider adding `use: compactor` in risedev config."
-            ));
-        }
+        // let provide_compactor = config.provide_compactor.as_ref().unwrap();
+        // if is_shared_backend && provide_compactor.is_empty() {
+        //     return Err(anyhow!(
+        //         "When using a shared backend (minio, aws-s3, or shared in-memory with `risedev playground`), at least one compactor is required. Consider adding `use: compactor` in risedev config."
+        //     ));
+        // }
         if is_persistent_meta_store && !is_persistent_backend {
             return Err(anyhow!(
                 "When using a persistent meta store (etcd), a persistent state store is required (e.g. minio, aws-s3, etc.)."
