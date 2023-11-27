@@ -742,6 +742,7 @@ where
                         event_key,
                     })
                     .await?;
+                local_stats.skip_delete_key_count += 1;
             }
 
             progress_key_num += 1;
@@ -854,6 +855,7 @@ where
                     event_key,
                 })
                 .await?;
+            local_stats.skip_delete_key_count += 1;
             progress_key_num += 1;
             if let Some(task_progress) = task_progress.as_ref()
                 && progress_key_num >= PROGRESS_KEY_INTERVAL

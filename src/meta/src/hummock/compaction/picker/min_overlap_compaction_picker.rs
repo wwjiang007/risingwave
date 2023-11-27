@@ -47,8 +47,8 @@ impl MinOverlappingPicker {
             target_level,
             max_select_bytes,
             split_by_table,
-            overlap_strategy,
             max_delete_ratio,
+            overlap_strategy,
         }
     }
 
@@ -101,6 +101,11 @@ impl MinOverlappingPicker {
                 if pending_compact {
                     break;
                 }
+                let select_delete_ratio = if select_key_count == 0 {
+                    100
+                } else {
+                    select_tombstone * 100 / select_key_count
+                };
                 let delete_ratio = if total_keys == 0 {
                     100
                 } else {
@@ -109,7 +114,7 @@ impl MinOverlappingPicker {
                 scores.push((
                     total_file_size * 100 / select_file_size,
                     (left, right),
-                    delete_ratio,
+                    std::cmp::min(delete_ratio, select_delete_ratio),
                 ));
             }
         }
