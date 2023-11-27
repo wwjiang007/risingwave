@@ -122,6 +122,7 @@ impl DynamicLevelSelectorCore {
                     picker_info.target_level,
                     self.config.max_bytes_for_level_base,
                     self.config.split_by_state_table,
+                    self.config.tombstone_reclaim_ratio as u64,
                     overlap_strategy,
                 ))
             }
