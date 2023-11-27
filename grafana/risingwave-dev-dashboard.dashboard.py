@@ -197,6 +197,16 @@ def section_compaction(outer_panels):
                     ],
                 ),
                 panels.timeseries_count(
+                    "Tombstone Count",
+                    "The number of Tombstone at each level",
+                    [
+                        panels.target(
+                            f"sum({metric('storage_level_total_tombstone_count')}) by ({NODE_LABEL}, level_index)",
+                            "L{{level_index}}",
+                        ),
+                    ],
+                ),
+                panels.timeseries_count(
                     "Compaction Failure Count",
                     "The number of compactions from one level to another level that have completed or failed",
                     [

@@ -86,6 +86,8 @@ pub struct MetaMetrics {
     pub compact_frequency: IntCounterVec,
     /// Size of each level
     pub level_file_size: IntGaugeVec,
+    /// The number of tombstone count of each level
+    pub level_tombstone_count: IntGaugeVec,
     /// Hummock version size
     pub version_size: IntGauge,
     /// The version Id of current version.
@@ -344,6 +346,13 @@ impl MetaMetrics {
         let level_file_size = register_int_gauge_vec_with_registry!(
             "storage_level_total_file_size",
             "KBs total file bytes in each level",
+            &["level_index"],
+            registry
+        )
+        .unwrap();
+        let level_tombstone_count = register_int_gauge_vec_with_registry!(
+            "storage_level_total_tombstone_count",
+            "total tombstone count in each level",
             &["level_index"],
             registry
         )
@@ -633,6 +642,7 @@ impl MetaMetrics {
             compact_frequency,
             compact_skip_frequency,
             level_file_size,
+            level_tombstone_count,
             version_size,
             version_stats,
             materialized_view_stats,

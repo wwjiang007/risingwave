@@ -57,6 +57,7 @@ impl MinOverlappingPicker {
         select_tables: &[SstableInfo],
         target_tables: &[SstableInfo],
         avg_amp: u64,
+        is_bottommost: bool,
         level_handlers: &[LevelHandler],
     ) -> (Vec<SstableInfo>, Vec<SstableInfo>) {
         let mut scores = vec![];
@@ -85,8 +86,7 @@ impl MinOverlappingPicker {
                 let overlap_files_range = overlap_info.check_multiple_overlap(target_tables);
                 let mut total_file_size = 0;
                 let mut pending_compact = false;
-                let mut delete_keys = select_tombstone;
-                let mut total_keys = select_key_count;
+                let mut total_keys = 0;
                 if !overlap_files_range.is_empty() {
                     for other in &target_tables[overlap_files_range] {
                         if level_handlers[self.target_level].is_pending_compact(&other.sst_id) {
@@ -94,7 +94,6 @@ impl MinOverlappingPicker {
                             break;
                         }
                         total_file_size += other.file_size;
-                        delete_keys += other.stale_key_count;
                         total_keys += other.total_key_count;
                     }
                 }
@@ -106,15 +105,14 @@ impl MinOverlappingPicker {
                 } else {
                     select_tombstone * 100 / select_key_count
                 };
-                let delete_ratio = if total_keys == 0 {
-                    100
-                } else {
-                    delete_keys * 100 / total_keys
-                };
+                if is_bottommost && select_tombstone > 0 && total_keys > 0 {
+                    let rest_ratio = (total_keys - select_tombstone) * 100 / total_keys;
+                    total_file_size = total_file_size * rest_ratio / 100;
+                }
                 scores.push((
                     total_file_size * 100 / select_file_size,
                     (left, right),
-                    std::cmp::min(delete_ratio, select_delete_ratio),
+                    select_delete_ratio,
                 ));
             }
         }
@@ -162,15 +160,20 @@ impl CompactionPicker for MinOverlappingPicker {
     ) -> Option<CompactionInput> {
         assert!(self.level > 0);
         let target_level_size = levels.get_level(self.target_level).total_file_size;
-        let select_levle_size = levels.get_level(self.level).total_file_size;
+        let select_level_size = levels.get_level(self.level).total_file_size;
         let (select_input_ssts, target_input_ssts) = self.pick_tables(
             &levels.get_level(self.level).table_infos,
             &levels.get_level(self.target_level).table_infos,
-            if select_levle_size == 0 {
+            if select_level_size == 0 {
                 u64::MAX
             } else {
-                target_level_size * 100 / select_levle_size
+                target_level_size * 100 / select_level_size
             },
+            self.target_level
+                == levels
+                    .levels
+                    .last()
+                    .map_or(0, |level| level.level_idx as usize),
             level_handlers,
         );
         if select_input_ssts.is_empty() {
@@ -895,6 +898,7 @@ pub mod tests {
             &levels[1].table_infos,
             &levels[2].table_infos,
             500,
+            true,
             &levels_handlers,
         );
         let overlap_strategy = Arc::new(RangeOverlapStrategy::default());

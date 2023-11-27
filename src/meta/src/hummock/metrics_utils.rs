@@ -105,6 +105,19 @@ pub fn trigger_sst_stat(
         });
         sst_num
     };
+    let level_tombstone_cnt = |level_idx: usize| {
+        let mut tombstone_cnt = 0;
+        current_version.level_iter(compaction_group_id, |level| {
+            if level.level_idx == level_idx as u32 {
+                for sst in &level.table_infos {
+                    tombstone_cnt += sst.stale_key_count;
+                }
+            }
+            true
+        });
+        tombstone_cnt
+    };
+
     let level_sst_size = |level_idx: usize| {
         let mut level_sst_size = 0;
         current_version.level_iter(compaction_group_id, |level| {
@@ -119,6 +132,7 @@ pub fn trigger_sst_stat(
     let mut compacting_task_stat: BTreeMap<(usize, usize), usize> = BTreeMap::default();
     for idx in 0..current_version.num_levels(compaction_group_id) {
         let sst_num = level_sst_cnt(idx);
+        let tombstone_cnt = level_tombstone_cnt(idx);
         let level_label = format!("cg{}_L{}", compaction_group_id, idx);
         metrics
             .level_sst_num
@@ -128,6 +142,10 @@ pub fn trigger_sst_stat(
             .level_file_size
             .with_label_values(&[&level_label])
             .set(level_sst_size(idx) as i64);
+        metrics
+            .level_tombstone_count
+            .with_label_values(&[&level_label])
+            .set(tombstone_cnt as i64);
         if let Some(compact_status) = compact_status {
             let compact_cnt = compact_status.level_handlers[idx].get_pending_file_count();
             metrics
