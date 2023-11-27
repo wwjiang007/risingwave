@@ -102,6 +102,7 @@ impl<I: HummockIterator<Direction = Forward>> UserIterator<I> {
     ///   (may reach to the end and thus not valid)
     /// - if `Err(_) ` is returned, it means that some error happened.
     pub async fn next(&mut self) -> HummockResult<()> {
+        let mut initial_delete_range_iter = self.last_key.is_empty();
         while self.iterator.is_valid() {
             let full_key = self.iterator.key();
             let epoch = full_key.epoch_with_gap.pure_epoch();
@@ -128,7 +129,12 @@ impl<I: HummockIterator<Direction = Forward>> UserIterator<I> {
                 // handle delete operation
                 match self.iterator.value() {
                     HummockValue::Put(val) => {
-                        self.delete_range_iter.next_until(full_key.user_key).await?;
+                        if initial_delete_range_iter {
+                            self.delete_range_iter.seek(full_key.user_key).await?;
+                            initial_delete_range_iter = false;
+                        } else {
+                            self.delete_range_iter.next_until(full_key.user_key).await?;
+                        }
                         if self.delete_range_iter.current_epoch() >= epoch {
                             self.stats.skip_delete_key_count += 1;
                         } else {
@@ -195,8 +201,6 @@ impl<I: HummockIterator<Direction = Forward>> UserIterator<I> {
                     self.out_of_range = true;
                     return Ok(());
                 }
-
-                self.delete_range_iter.seek(begin_key.as_ref()).await?;
             }
             Excluded(_) => unimplemented!("excluded begin key is not supported"),
             Unbounded => {
