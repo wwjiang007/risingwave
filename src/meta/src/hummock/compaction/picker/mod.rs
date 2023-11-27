@@ -61,6 +61,8 @@ pub struct CompactionInput {
     pub select_input_size: u64,
     pub target_input_size: u64,
     pub total_file_count: u64,
+    pub select_stale_key_count: u64,
+    pub target_total_key_count: u64,
 }
 
 impl CompactionInput {

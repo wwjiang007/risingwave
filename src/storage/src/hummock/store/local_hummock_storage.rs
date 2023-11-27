@@ -434,6 +434,10 @@ impl LocalHummockStorage {
             .write_batch_tuple_counts
             .with_label_values(&[table_id_label.as_str()])
             .inc_by(kv_pairs.len() as _);
+        self.stats
+            .write_batch_range_counts
+            .with_label_values(&[table_id_label.as_str()])
+            .inc_by(delete_ranges.len() as _);
         let timer = self
             .stats
             .write_batch_duration

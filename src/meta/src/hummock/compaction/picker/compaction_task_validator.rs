@@ -197,6 +197,10 @@ impl CompactionTaskValidationRule for BaseCompactionTaskValidationRule {
             return false;
         }
 
+        if input.select_stale_key_count > 2 * input.target_total_key_count {
+            return true;
+        }
+
         if input.select_input_size < input.target_input_size {
             stats.skip_by_write_amp_limit += 1;
             return false;

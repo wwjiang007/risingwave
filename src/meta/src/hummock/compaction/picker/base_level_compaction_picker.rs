@@ -200,7 +200,7 @@ impl LevelCompactionPicker {
             return None;
         }
 
-        for (input, target_file_size, target_level_key_count, target_level_files) in input_levels {
+        for (input, target_file_size, target_total_key_count, target_level_files) in input_levels {
             let mut select_level_inputs = input
                 .sstable_infos
                 .into_iter()
@@ -224,16 +224,16 @@ impl LevelCompactionPicker {
                 select_input_size: input.total_file_size,
                 target_input_size: target_file_size,
                 total_file_count: (input.total_file_count + target_file_count) as u64,
+                select_stale_key_count: input.total_stale_key_count,
+                target_total_key_count,
                 ..Default::default()
             };
 
-            if input.total_stale_key_count < 2 * target_level_key_count
-                && !self.compaction_task_validator.valid_compact_task(
-                    &result,
-                    ValidationRuleType::ToBase,
-                    stats,
-                )
-            {
+            if !self.compaction_task_validator.valid_compact_task(
+                &result,
+                ValidationRuleType::ToBase,
+                stats,
+            ) {
                 continue;
             }
 

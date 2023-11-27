@@ -573,9 +573,6 @@ impl HummockEventHandler {
 
                 if is_checkpoint {
                     self.uploader.start_sync_epoch(epoch);
-                } else {
-                    // start merging task on non-checkpoint epochs sealed
-                    self.uploader.start_merge_imms(epoch);
                 }
             }
 

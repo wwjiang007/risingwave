@@ -54,6 +54,7 @@ pub struct HummockStateStoreMetrics {
     pub read_req_check_bloom_filter_counts: RelabeledGuardedIntCounterVec<2>,
 
     pub write_batch_tuple_counts: RelabeledCounterVec,
+    pub write_batch_range_counts: RelabeledCounterVec,
     pub write_batch_duration: RelabeledHistogramVec,
     pub write_batch_size: RelabeledHistogramVec,
 
@@ -227,7 +228,18 @@ impl HummockStateStoreMetrics {
             write_batch_tuple_counts,
             metric_level,
         );
-
+        let write_batch_range_counts = register_int_counter_vec_with_registry!(
+            "state_store_write_batch_range_counts",
+            "Total number of batched write kv pairs requests that have been issued to state store",
+            &["table_id"],
+            registry
+        )
+        .unwrap();
+        let write_batch_range_counts = RelabeledCounterVec::with_metric_level(
+            MetricLevel::Debug,
+            write_batch_range_counts,
+            metric_level,
+        );
         let opts = histogram_opts!(
                 "state_store_write_batch_duration",
                 "Total time of batched write that have been issued to state store. With shared buffer on, this is the latency writing to the shared buffer",
@@ -386,6 +398,7 @@ impl HummockStateStoreMetrics {
             read_req_positive_but_non_exist_counts,
             read_req_check_bloom_filter_counts,
             write_batch_tuple_counts,
+            write_batch_range_counts,
             write_batch_duration,
             write_batch_size,
             merge_imm_task_counts,

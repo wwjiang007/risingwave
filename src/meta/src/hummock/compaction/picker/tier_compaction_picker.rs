@@ -122,6 +122,7 @@ impl TierCompactionPicker {
                 select_input_size: compaction_bytes,
                 target_input_size: 0,
                 total_file_count: compact_file_count,
+                ..Default::default()
             };
 
             if !self.compaction_task_validator.valid_compact_task(
