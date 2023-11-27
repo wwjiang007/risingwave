@@ -168,6 +168,7 @@ impl LevelCompactionPicker {
                 .check_base_level_overlap(&l0_select_tables, &target_level.table_infos);
 
             let mut target_level_size = 0;
+            let mut target_level_key_count = 0;
             let mut pending_compact = false;
             for sst in &target_level_ssts {
                 if level_handlers[target_level.level_idx as usize].is_pending_compact(&sst.sst_id) {
@@ -176,6 +177,7 @@ impl LevelCompactionPicker {
                 }
 
                 target_level_size += sst.file_size;
+                target_level_key_count += sst.total_key_count;
             }
 
             if pending_compact {
@@ -183,7 +185,12 @@ impl LevelCompactionPicker {
                 continue;
             }
 
-            input_levels.push((input, target_level_size, target_level_ssts));
+            input_levels.push((
+                input,
+                target_level_size,
+                target_level_key_count,
+                target_level_ssts,
+            ));
         }
 
         if input_levels.is_empty() {
@@ -193,7 +200,7 @@ impl LevelCompactionPicker {
             return None;
         }
 
-        for (input, target_file_size, target_level_files) in input_levels {
+        for (input, target_file_size, target_level_key_count, target_level_files) in input_levels {
             let mut select_level_inputs = input
                 .sstable_infos
                 .into_iter()
@@ -220,11 +227,13 @@ impl LevelCompactionPicker {
                 ..Default::default()
             };
 
-            if !self.compaction_task_validator.valid_compact_task(
-                &result,
-                ValidationRuleType::ToBase,
-                stats,
-            ) {
+            if input.total_stale_key_count < 2 * target_level_key_count
+                && !self.compaction_task_validator.valid_compact_task(
+                    &result,
+                    ValidationRuleType::ToBase,
+                    stats,
+                )
+            {
                 continue;
             }
 

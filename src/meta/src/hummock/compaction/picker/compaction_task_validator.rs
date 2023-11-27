@@ -143,6 +143,13 @@ impl CompactionTaskValidationRule for IntraCompactionTaskValidationRule {
             return false;
         }
 
+        if input.select_input_size < self.config.target_file_size_base
+            && input.input_levels.len() < 2 * intra_sub_level_compact_level_count
+        {
+            stats.skip_by_count_limit += 1;
+            return false;
+        }
+
         let mut max_level_size = 0;
         for select_level in &input.input_levels {
             let level_select_size = select_level

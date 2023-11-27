@@ -207,6 +207,7 @@ pub struct SubLevelSstables {
     pub total_file_size: u64,
     pub total_file_count: usize,
     pub sstable_infos: Vec<Vec<SstableInfo>>,
+    pub total_stale_key_count: u64,
 }
 
 pub struct NonOverlapSubLevelPicker {
@@ -245,6 +246,7 @@ impl NonOverlapSubLevelPicker {
             total_file_count: 1,
             total_file_size: sst.file_size,
             sstable_infos: vec![vec![]; levels.len()],
+            total_stale_key_count: sst.stale_key_count,
         };
         ret.sstable_infos[0].extend(vec![sst.clone()]);
         let mut overlap_info = self.overlap_strategy.create_overlap_info();
@@ -278,6 +280,7 @@ impl NonOverlapSubLevelPicker {
             // the next layer to search for overlap
             let mut pending_compact = false;
             let mut current_level_size = 0;
+            let mut current_stale_key_count = 0;
             for index in overlap_files_range.start..overlap_files_range.end {
                 let other = &target_level.table_infos[index];
                 if level_handler.is_pending_compact(&other.sst_id) {
@@ -287,6 +290,7 @@ impl NonOverlapSubLevelPicker {
                 overlap_info.update(other);
                 select_sst_id_set.insert(other.sst_id);
                 current_level_size += other.file_size;
+                current_stale_key_count += other.stale_key_count;
             }
 
             if pending_compact {
@@ -321,6 +325,7 @@ impl NonOverlapSubLevelPicker {
                     }
                     debug_assert!(!select_sst_id_set.contains(&other.sst_id));
                     add_files_size += other.file_size;
+                    current_stale_key_count += other.stale_key_count;
                     overlap_info.update(other);
                     select_sst_id_set.insert(other.sst_id);
                     extra_overlap_sst.push(other.clone());
@@ -359,6 +364,7 @@ impl NonOverlapSubLevelPicker {
 
             ret.total_file_count += add_files_count;
             ret.total_file_size += add_files_size + current_level_size;
+            ret.total_stale_key_count += current_stale_key_count;
             if !overlap_files_range.is_empty() {
                 ret.sstable_infos[target_index]
                     .extend_from_slice(&target_level.table_infos[overlap_files_range.clone()]);
