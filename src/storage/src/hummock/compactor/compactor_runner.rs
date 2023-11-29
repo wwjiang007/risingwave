@@ -385,7 +385,7 @@ pub async fn compact(
         && compact_task.target_level > 0
         && compact_task.input_ssts.len() == 2
         && compact_task.task_type() == TaskType::Dynamic
-        && stale_key_count < total_key_count / 5;
+        && stale_key_count < total_key_count / 3;
     if !optimize_by_copy_block {
         match generate_splits(&sstable_infos, compaction_size, context.clone()).await {
             Ok(splits) => {

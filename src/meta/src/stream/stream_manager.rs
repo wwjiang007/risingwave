@@ -451,6 +451,13 @@ impl GlobalStreamManager {
                 &table_properties,
             )
             .await?;
+        tracing::info!(
+            "register tables: {:?}",
+            internal_tables
+                .iter()
+                .map(|(key, table)| (key, table.name.clone(), table.cleaned_by_watermark))
+                .collect_vec()
+        );
         debug_assert_eq!(
             registered_table_ids.len(),
             table_fragments.internal_table_ids().len() + mv_table_id.map_or(0, |_| 1)
