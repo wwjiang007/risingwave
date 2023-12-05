@@ -233,6 +233,7 @@ fn try_consume_string_from_options(
     row_options.remove(key).map(AstString)
 }
 
+/// Same as [`try_consume_string_from_options`], but returns an error.
 fn consume_string_from_options(
     row_options: &mut BTreeMap<String, String>,
     key: &str,
@@ -273,17 +274,7 @@ fn get_schema_location(row_options: &mut BTreeMap<String, String>) -> Result<(As
     }
 }
 
-#[inline]
-fn get_name_strategy_or_default(name_strategy: Option<AstString>) -> Result<Option<i32>> {
-    match name_strategy {
-        None => Ok(None),
-        Some(name) => Ok(Some(name_strategy_from_str(name.0.as_str())
-            .ok_or_else(|| RwError::from(ProtocolError(format!("\
-            expect strategy name in topic_name_strategy, record_name_strategy and topic_record_name_strategy, but got {}", name))))? as i32)),
-    }
-}
-
-/// resolve the schema of the source from external schema file, return the relation's columns. see <https://www.risingwave.dev/docs/current/sql-create-source> for more information.
+/// Resolves the schema of the source from external schema file, return the relation's columns. see <https://www.risingwave.dev/docs/current/sql-create-source> for more information.
 /// return `(columns, source info)`
 pub(crate) async fn bind_columns_from_source(
     session: &SessionImpl,
@@ -298,25 +289,30 @@ pub(crate) async fn bind_columns_from_source(
     let is_kafka: bool = is_kafka_connector(with_properties);
     let mut options = WithOptions::try_from(source_schema.row_options())?.into_inner();
 
-    let get_key_message_name = |options: &mut BTreeMap<String, String>| -> Option<String> {
+    fn get_key_message_name(options: &mut BTreeMap<String, String>) -> Option<String> {
         consume_string_from_options(options, KEY_MESSAGE_NAME_KEY)
-            .map(|ele| Some(ele.0))
-            .unwrap_or(None)
-    };
-    let get_sr_name_strategy_check = |options: &mut BTreeMap<String, String>,
-                                      use_sr: bool|
-     -> Result<Option<i32>> {
-        let name_strategy = get_name_strategy_or_default(try_consume_string_from_options(
-            options,
-            NAME_STRATEGY_KEY,
-        ))?;
-        if !use_sr && name_strategy.is_some() {
+            .ok()
+            .map(|s| s.0)
+    }
+    fn get_and_check_sr_name_strategy(
+        options: &mut BTreeMap<String, String>,
+        use_sr: bool,
+    ) -> Result<Option<i32>> {
+        let Some(name_strategy) = try_consume_string_from_options(options, NAME_STRATEGY_KEY)
+        else {
+            return Ok(None);
+        };
+        let Some(name_strategy) = name_strategy_from_str(name_strategy.0.as_str()) else {
+            return Err(RwError::from(ProtocolError(format!("\
+            expect strategy name in topic_name_strategy, record_name_strategy and topic_record_name_strategy, but got {}", name_strategy))));
+        };
+        if !use_sr {
             return Err(RwError::from(ProtocolError(
                 "schema registry name strategy only works with schema registry enabled".to_string(),
             )));
         }
-        Ok(name_strategy)
-    };
+        Ok(Some(name_strategy as i32))
+    }
 
     let res = match (&source_schema.format, &source_schema.row_encode) {
         (Format::Native, Encode::Native) => (
@@ -335,7 +331,7 @@ pub(crate) async fn bind_columns_from_source(
                 use_schema_registry,
             };
             let name_strategy =
-                get_sr_name_strategy_check(&mut options, protobuf_schema.use_schema_registry)?;
+                get_and_check_sr_name_strategy(&mut options, protobuf_schema.use_schema_registry)?;
 
             (
                 Some(
@@ -384,7 +380,7 @@ pub(crate) async fn bind_columns_from_source(
             let key_message_name = get_key_message_name(&mut options);
             let message_name = try_consume_string_from_options(&mut options, MESSAGE_NAME_KEY);
             let name_strategy =
-                get_sr_name_strategy_check(&mut options, avro_schema.use_schema_registry)?;
+                get_and_check_sr_name_strategy(&mut options, avro_schema.use_schema_registry)?;
             let stream_source_info = StreamSourceInfo {
                 format: FormatType::Plain as i32,
                 row_encode: EncodeType::Avro as i32,
@@ -456,7 +452,7 @@ pub(crate) async fn bind_columns_from_source(
             };
 
             let name_strategy =
-                get_sr_name_strategy_check(&mut options, avro_schema.use_schema_registry)?
+                get_and_check_sr_name_strategy(&mut options, avro_schema.use_schema_registry)?
                     .unwrap_or(PbSchemaRegistryNameStrategy::Unspecified as i32);
             let key_message_name = get_key_message_name(&mut options);
             let message_name = try_consume_string_from_options(&mut options, MESSAGE_NAME_KEY);
@@ -501,7 +497,7 @@ pub(crate) async fn bind_columns_from_source(
 
             // no need to check whether works schema registry because debezium avro always work with
             // schema registry
-            let name_strategy = get_sr_name_strategy_check(&mut options, true)?;
+            let name_strategy = get_and_check_sr_name_strategy(&mut options, true)?;
             let message_name = try_consume_string_from_options(&mut options, MESSAGE_NAME_KEY);
             let key_message_name = get_key_message_name(&mut options);
 
@@ -558,7 +554,7 @@ pub(crate) async fn bind_columns_from_source(
         }
         (format, encoding) => {
             return Err(RwError::from(ProtocolError(format!(
-                "Unknown combination {:?} {:?}",
+                "Unknown combination FORMAT {:?} ENCODE {:?}",
                 format, encoding
             ))));
         }
@@ -586,7 +582,7 @@ pub(crate) async fn bind_columns_from_source(
     Ok(res)
 }
 
-/// Bind columns from both source and sql defined.
+/// Combine columns from source and sql.
 pub(crate) fn bind_all_columns(
     source_schema: &ConnectorSchema,
     cols_from_source: Option<Vec<ColumnCatalog>>,
@@ -683,7 +679,7 @@ pub(crate) fn bind_all_columns(
 }
 
 /// Bind column from source. Add key column to table columns if necessary.
-/// Return (columns, pks)
+/// Returns `pk_names`
 pub(crate) async fn bind_source_pk(
     source_schema: &ConnectorSchema,
     source_info: &StreamSourceInfo,
@@ -789,8 +785,8 @@ pub(crate) async fn bind_source_pk(
     Ok(res)
 }
 
-// Add a hidden column `_rw_kafka_timestamp` to each message from Kafka source.
-fn check_and_add_timestamp_column(
+/// Add a hidden column `_rw_kafka_timestamp` to each message from Kafka source.
+fn try_add_kafka_timestamp_column(
     with_properties: &HashMap<String, String>,
     columns: &mut Vec<ColumnCatalog>,
 ) {
@@ -1139,7 +1135,7 @@ pub async fn handle_create_source(
         with_properties.insert(CDC_SHARING_MODE_KEY.into(), "true".into());
     }
 
-    check_and_add_timestamp_column(&with_properties, &mut columns);
+    try_add_kafka_timestamp_column(&with_properties, &mut columns);
 
     let mut col_id_gen = ColumnIdGenerator::new_initial();
     for c in &mut columns {

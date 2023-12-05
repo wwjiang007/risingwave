@@ -47,6 +47,8 @@ enum CreateType {
   CREATE_TYPE_FOREGROUND = 2;
 }
 
+// Additional information for sources. Mainly the format information.
+// TODO: rename to `SourceFormatDesc`?
 message StreamSourceInfo {
   // deprecated
   plan_common.RowFormatType row_format = 1;
@@ -85,6 +87,9 @@ message Source {
 
   uint32 owner = 9;
 
+  // Historically, we use `info` to distinguish table source and stream source, and put
+  // source-specific information in `info`. Now we only have stream source, so this field
+  // is less meaningful.
   StreamSourceInfo info = 10;
   // Define watermarks on the source. The `repeated` is just for forward
   // compatibility, currently, only one watermark on the source

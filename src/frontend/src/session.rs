@@ -657,6 +657,9 @@ impl SessionImpl {
             .map(|context| context.last_instant.elapsed().as_millis())
     }
 
+    /// When the relation already exists
+    /// - Returns `Err` if `if_not_exists` is `false`
+    /// - Returns `Ok(Either::Right)` with a notice response if `if_not_exists` is `true`
     pub fn check_relation_name_duplicated(
         &self,
         name: ObjectName,

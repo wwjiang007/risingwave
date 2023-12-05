@@ -249,7 +249,7 @@ fn check_generated_column_constraints(
 }
 
 /// Binds constraints that can be only specified in column definitions,
-/// currently generated columns and default columns.
+/// currently including generated columns and default columns.
 pub fn bind_sql_column_constraints(
     session: &SessionImpl,
     table_name: String,
