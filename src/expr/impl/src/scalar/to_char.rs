@@ -19,7 +19,8 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use chrono::format::{Item, StrftimeItems};
 use chrono::{Datelike, NaiveDate};
 use risingwave_common::types::{Interval, Timestamp, Timestamptz};
-use risingwave_expr::{function, ExprError, Result};
+use risingwave_expr::expr_context::TIME_ZONE;
+use risingwave_expr::{capture_context, function, Result, ExprError};
 
 use super::timestamptz::time_zone_err;
 use crate::scalar::arithmetic_op::timestamp_interval_add;
@@ -192,21 +193,27 @@ fn timestamp_to_char(data: Timestamp, pattern: &ChronoPattern, writer: &mut impl
     write!(writer, "{}", format).unwrap();
 }
 
-#[function("to_char(timestamptz, varchar) -> varchar", rewritten)]
-fn _timestamptz_to_char() {}
-
 #[function(
-    "to_char(timestamptz, varchar, varchar) -> varchar",
+    "to_char(timestamptz, varchar) -> varchar",
     prebuild = "ChronoPattern::compile($1)"
 )]
-fn timestamptz_to_char3(
+fn timestamptz_to_char(
     data: Timestamptz,
-    zone: &str,
+    tmpl: &ChronoPattern,
+    writer: &mut impl Write,
+) -> Result<()> {
+    timestamptz_to_char_impl_captured(data, tmpl, writer)
+}
+
+#[capture_context(TIME_ZONE)]
+fn timestamptz_to_char_impl(
+    time_zone: &str,
+    data: Timestamptz,
     tmpl: &ChronoPattern,
     writer: &mut impl Write,
 ) -> Result<()> {
     let format = data
-        .to_datetime_in_zone(Timestamptz::lookup_time_zone(zone).map_err(time_zone_err)?)
+        .to_datetime_in_zone(Timestamptz::lookup_time_zone(time_zone).map_err(time_zone_err)?)
         .format_with_items(tmpl.borrow_dependent().iter());
     write!(writer, "{}", format).unwrap();
     Ok(())
@@ -399,4 +406,18 @@ fn format_inner(w: &mut impl Write, interval: Interval, item: &Item<'_>) -> Resu
         }
         Item::Error => Err(invalid_pattern_err()),
     }
+}
+
+#[function(
+    "to_char(timestamptz, varchar, varchar) -> varchar",
+    prebuild = "ChronoPattern::compile($1)",
+    deprecated
+)]
+fn timestamptz_to_char_legacy(
+    data: Timestamptz,
+    time_zone: &str,
+    tmpl: &ChronoPattern,
+    writer: &mut impl Write,
+) -> Result<()> {
+    timestamptz_to_char_impl(time_zone, data, tmpl, writer)
 }

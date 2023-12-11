@@ -15,7 +15,7 @@
 use risingwave_common::types::{Interval, Timestamp, Timestamptz};
 use risingwave_expr::{function, ExprError, Result};
 
-use super::timestamptz::timestamp_at_time_zone;
+use super::timestamptz::timestamp_at_time_zone_impl;
 
 // TODO(xiangjinwu): parse into an enum
 const MICROSECONDS: &str = "microseconds";
@@ -81,7 +81,7 @@ pub fn date_trunc_timestamptz_at_timezone(
             let truncated_local = truncated_naive.0.and_local_timezone(fixed).unwrap();
             Ok(Timestamptz::from_micros(truncated_local.timestamp_micros()))
         }
-        _ => timestamp_at_time_zone(truncated_naive, timezone),
+        _ => timestamp_at_time_zone_impl(timezone, truncated_naive),
     }
 }
 
