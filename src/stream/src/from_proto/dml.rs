@@ -16,12 +16,15 @@ use itertools::Itertools;
 use risingwave_common::catalog::TableId;
 use risingwave_pb::stream_plan::DmlNode;
 use risingwave_storage::StateStore;
+use crate::executor::FlowControlExecutor;
+use crate::executor::Executor;
 
 use super::ExecutorBuilder;
 use crate::error::StreamResult;
 use crate::executor::dml::DmlExecutor;
 use crate::executor::BoxedExecutor;
 use crate::task::{ExecutorParams, LocalStreamManagerCore};
+use std::num::NonZeroU64;
 
 pub struct DmlExecutorBuilder;
 
@@ -37,13 +40,21 @@ impl ExecutorBuilder for DmlExecutorBuilder {
         let [upstream]: [_; 1] = params.input.try_into().unwrap();
         let table_id = TableId::new(node.table_id);
         let column_descs = node.column_descs.iter().map(Into::into).collect_vec();
-        Ok(Box::new(DmlExecutor::new(
+        let rate_limit = node.rate_limit.as_ref().map(|v| NonZeroU64::new(*v).unwrap());
+        let executor = Box::new(DmlExecutor::new(
             params.info,
             upstream,
             params.env.dml_manager_ref(),
             table_id,
             node.table_version_id,
             column_descs,
-        )))
+            rate_limit,
+        ));
+        Ok(FlowControlExecutor::new(
+            executor,
+            params.actor_context,
+            node.rate_limit.map(|x| x as _),
+        )
+            .boxed())
     }
 }
