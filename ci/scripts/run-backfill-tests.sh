@@ -173,7 +173,7 @@ test_replication_with_column_pruning() {
 # Test sink backfill recovery
 test_sink_backfill_recovery() {
   echo "--- e2e, test_sink_backfill_recovery"
-  cargo make ci-start $CLUSTER_PROFILE
+  cargo make ci-start ci-3streaming-2serving-3fe
 
   # Check progress
   sqllogictest -p 4566 -d dev 'e2e_test/backfill/sink/create_sink.slt'
@@ -199,6 +199,10 @@ test_sink_backfill_recovery() {
 
   # Verify data matches upstream table.
   sqllogictest -p 4566 -d dev 'e2e_test/backfill/sink/validate_sink.slt'
+
+  echo "--- Kill cluster"
+  cargo make kill
+  cargo make wait-processes-exit
 }
 
 # test dml amplification
@@ -217,6 +221,10 @@ test_dml_amplification() {
   # Test barrier latency
   # Test drop sink
   sqllogictest -p 4566 -d dev 'e2e_test/backfill/sink/test_join_sink.slt'
+
+  echo "--- Kill cluster"
+  cargo make kill
+  cargo make wait-processes-exit
 }
 
 main() {
