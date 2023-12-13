@@ -690,6 +690,9 @@ impl dyn PlanNode {
         if let Some(stream_share) = self.as_stream_share() {
             return stream_share.adhoc_to_stream_prost(state);
         }
+        if let Some(stream_source) = self.as_stream_source() {
+            return stream_source.adhoc_to_stream_prost(state);
+        }
 
         let node = Some(self.to_stream_prost_body(state));
         let input = self

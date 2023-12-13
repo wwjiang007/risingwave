@@ -18,16 +18,17 @@ use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use pretty_xmlish::{Pretty, XmlNode};
 use risingwave_pb::stream_plan::stream_node::PbNodeBody;
-use risingwave_pb::stream_plan::{PbStreamSource, SourceNode};
+use risingwave_pb::stream_plan::{PbStreamNode, PbStreamSource, SourceNode};
 
 use super::stream::prelude::*;
 use super::utils::{childless_record, Distill};
-use super::{generic, ExprRewritable, PlanBase, StreamNode};
+use super::{generic, ExprRewritable, PlanBase, PlanNodeMeta, StreamNode};
 use crate::catalog::source_catalog::SourceCatalog;
 use crate::optimizer::plan_node::expr_visitable::ExprVisitable;
 use crate::optimizer::plan_node::utils::column_names_pretty;
 use crate::optimizer::property::Distribution;
 use crate::stream_fragmenter::BuildFragmentGraphState;
+use crate::PlanRef;
 
 /// [`StreamSource`] represents a table/connector source at the very beginning of the graph.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -51,25 +52,9 @@ impl StreamSource {
     pub fn source_catalog(&self) -> Option<Rc<SourceCatalog>> {
         self.core.catalog.clone()
     }
-}
 
-impl_plan_tree_node_for_leaf! { StreamSource }
-
-impl Distill for StreamSource {
-    fn distill<'a>(&self) -> XmlNode<'a> {
-        let fields = if let Some(catalog) = self.source_catalog() {
-            let src = Pretty::from(catalog.name.clone());
-            let col = column_names_pretty(self.schema());
-            vec![("source", src), ("columns", col)]
-        } else {
-            vec![]
-        };
-        childless_record("StreamSource", fields)
-    }
-}
-
-impl StreamNode for StreamSource {
-    fn to_stream_prost_body(&self, state: &mut BuildFragmentGraphState) -> PbNodeBody {
+    /// TODO: may add backfill node here
+    pub fn adhoc_to_stream_prost(&self, state: &mut BuildFragmentGraphState) -> PbStreamNode {
         let source_catalog = self.source_catalog();
         let source_inner = source_catalog.map(|source_catalog| PbStreamSource {
             source_id: source_catalog.id,
@@ -90,7 +75,52 @@ impl StreamNode for StreamSource {
             properties: source_catalog.properties.clone().into_iter().collect(),
             rate_limit: self.base.ctx().overwrite_options().streaming_rate_limit,
         });
-        PbNodeBody::Source(SourceNode { source_inner })
+        let node_body = PbNodeBody::Source(SourceNode { source_inner });
+
+        PbStreamNode {
+            input: vec![
+                // The merge node body will be filled by the `ActorBuilder` on the meta service.
+                PbStreamNode {
+                    node_body: Some(PbNodeBody::Merge(Default::default())),
+                    identity: "Upstream".into(),
+                    fields: self.schema().to_prost(),
+                    stream_key: vec![], // not used
+                    ..Default::default()
+                },
+            ],
+            identity: self.distill_to_string(),
+            node_body: Some(node_body),
+            operator_id: self.id().0 as _,
+            stream_key: self
+                .stream_key()
+                .unwrap_or_default()
+                .iter()
+                .map(|x| *x as u32)
+                .collect(),
+            fields: self.schema().to_prost(),
+            append_only: self.plan_base().append_only(),
+        }
+    }
+}
+
+impl_plan_tree_node_for_leaf! { StreamSource }
+
+impl Distill for StreamSource {
+    fn distill<'a>(&self) -> XmlNode<'a> {
+        let fields = if let Some(catalog) = self.source_catalog() {
+            let src = Pretty::from(catalog.name.clone());
+            let col = column_names_pretty(self.schema());
+            vec![("source", src), ("columns", col)]
+        } else {
+            vec![]
+        };
+        childless_record("StreamSource", fields)
+    }
+}
+
+impl StreamNode for StreamSource {
+    fn to_stream_prost_body(&self, state: &mut BuildFragmentGraphState) -> PbNodeBody {
+        unreachable!()
     }
 }
 

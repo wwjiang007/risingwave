@@ -1,10 +1,10 @@
 ---
 version: "3"
 services:
-  risingwave-standalone:
-    extends:
-      file: ../../docker/docker-compose.yml
-      service: risingwave-standalone
+  # risingwave-standalone:
+  #   extends:
+  #     file: ../../docker/docker-compose.yml
+  #     service: risingwave-standalone
   etcd-0:
     extends:
       file: ../../docker/docker-compose.yml
@@ -47,19 +47,19 @@ services:
       - /bin/sh
       - -c
       - "mysql -h mysql -u root -P 3306 mydb --password=123456 -A < /compatibility-mysql.sql"
-  rw_prepare:
-    image: postgres
-    depends_on:
-      mysql_prepare:
-        condition: service_completed_successfully
-      risingwave-standalone:
-        condition: service_healthy
-    volumes:
-      - "./compatibility-rw.sql:/compatibility-rw.sql"
-    command:
-      - /bin/sh
-      - -c
-      - "psql postgresql://root:@risingwave-standalone:4566/dev < /compatibility-rw.sql"
+  # rw_prepare:
+  #   image: postgres
+  #   depends_on:
+  #     mysql_prepare:
+  #       condition: service_completed_successfully
+  #     risingwave-standalone:
+  #       condition: service_healthy
+  #   volumes:
+  #     - "./compatibility-rw.sql:/compatibility-rw.sql"
+  #   command:
+  #     - /bin/sh
+  #     - -c
+  #     - "psql postgresql://root:@risingwave-standalone:4566/dev < /compatibility-rw.sql"
   datagen_tpch:
     image: ghcr.io/risingwavelabs/go-tpc:v0.1
     depends_on:

@@ -1101,7 +1101,6 @@ pub async fn handle_create_source(
     ensure_table_constraints_supported(&stmt.constraints)?;
     let sql_pk_names = bind_sql_pk_names(&stmt.columns, &stmt.constraints)?;
 
-    // gated the feature with a session variable
     let create_cdc_source_job = if is_cdc_connector(&with_properties) {
         CdcTableType::from_properties(&with_properties).can_backfill()
     } else {
@@ -1203,7 +1202,9 @@ pub async fn handle_create_source(
 
     let catalog_writer = session.catalog_writer()?;
 
-    if create_cdc_source_job {
+    let create_stream_job = true;
+
+    if create_cdc_source_job || create_stream_job {
         // create a streaming job for the cdc source, which will mark as *singleton* in the Fragmenter
         let graph = {
             let context = OptimizerContext::from_handler_args(handler_args);

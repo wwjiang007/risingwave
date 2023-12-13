@@ -131,6 +131,7 @@ impl StreamNode for StreamCdcTableScan {
 }
 
 impl StreamCdcTableScan {
+    /// plan: merge -> filter -> exchange(simple) -> stream_cdc_scan
     pub fn adhoc_to_stream_prost(&self, state: &mut BuildFragmentGraphState) -> PbStreamNode {
         use risingwave_pb::stream_plan::*;
 
@@ -253,7 +254,7 @@ impl StreamCdcTableScan {
             cdc_table_desc: Some(self.core.cdc_table_desc.to_protobuf()),
         });
 
-        // plan: merge -> filter -> exchange(simple) -> stream_scan
+        // plan: merge -> filter -> exchange(simple) -> stream_cdc_scan
         PbStreamNode {
             fields: self.schema().to_prost(),
             input: vec![exchange_stream_node],

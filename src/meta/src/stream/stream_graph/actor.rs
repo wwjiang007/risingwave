@@ -244,6 +244,50 @@ impl ActorBuilder {
                 })
             }
 
+            // "Leaf" node `StreamSource`.
+            NodeBody::Source(source) => {
+                let input = stream_node.get_input();
+                assert_eq!(input.len(), 1);
+
+                let merge_node = &input[0];
+                assert_matches!(merge_node.node_body, Some(NodeBody::Merge(_)));
+
+                let upstream_source_id = source.upstream_source_id;
+                tracing::debug!(
+                    "rewrite leaf cdc filter node: upstream source id {}",
+                    upstream_source_id,
+                );
+
+                // Index the upstreams by the an external edge ID.
+                let upstreams = &self.upstreams[&EdgeId::UpstreamExternal {
+                    upstream_table_id: upstream_source_id.into(),
+                    downstream_fragment_id: self.fragment_id,
+                }];
+
+                // Upstream Cdc Source should be singleton.
+                let upstream_actor_id = upstreams.actors.as_global_ids();
+                assert_eq!(upstream_actor_id.len(), 1);
+
+                // rewrite the input of `CdcFilter`
+                let input = vec![
+                    // Fill the merge node body with correct upstream info.
+                    StreamNode {
+                        node_body: Some(NodeBody::Merge(MergeNode {
+                            upstream_actor_id,
+                            upstream_fragment_id: upstreams.fragment_id.as_global_id(),
+                            upstream_dispatcher_type: DispatcherType::NoShuffle as _,
+                            fields: merge_node.fields.clone(),
+                        })),
+                        ..merge_node.clone()
+                    },
+                ];
+                Ok(StreamNode {
+                    input,
+                    ..stream_node.clone()
+                })
+            }
+
+
             // For other nodes, visit the children recursively.
             _ => {
                 let mut new_stream_node = stream_node.clone();
