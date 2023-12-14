@@ -283,9 +283,19 @@ where
 
         let table_option = TableOption::build_table_option(table_catalog.get_properties());
         let new_local_options = if IS_REPLICATED {
-            NewLocalOptions::new_replicated(table_id, is_consistent_op, table_option)
+            NewLocalOptions::new_replicated(
+                table_id,
+                is_consistent_op,
+                table_option,
+                table_catalog.version.clone().map(|v| v.version),
+            )
         } else {
-            NewLocalOptions::new(table_id, is_consistent_op, table_option)
+            NewLocalOptions::new(
+                table_id,
+                is_consistent_op,
+                table_option,
+                table_catalog.version.clone().map(|v| v.version),
+            )
         };
         let local_state_store = store.new_local(new_local_options).await;
 
@@ -367,6 +377,7 @@ where
     pub async fn new_without_distribution(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -374,6 +385,7 @@ where
         Self::new_with_distribution(
             store,
             table_id,
+            table_version,
             columns,
             order_types,
             pk_indices,
@@ -387,6 +399,7 @@ where
     pub async fn new_without_distribution_with_value_indices(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -395,6 +408,7 @@ where
         Self::new_with_distribution(
             store,
             table_id,
+            table_version,
             columns,
             order_types,
             pk_indices,
@@ -408,6 +422,7 @@ where
     pub async fn new_without_distribution_inconsistent_op(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -415,6 +430,7 @@ where
         Self::new_with_distribution_inner(
             store,
             table_id,
+            table_version,
             columns,
             order_types,
             pk_indices,
@@ -427,9 +443,11 @@ where
 
     /// Create a state table with distribution specified with `distribution`. Should use
     /// `Distribution::fallback()` for tests.
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_distribution(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         table_columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -439,6 +457,7 @@ where
         Self::new_with_distribution_inner(
             store,
             table_id,
+            table_version,
             table_columns,
             order_types,
             pk_indices,
@@ -449,9 +468,11 @@ where
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_distribution_inconsistent_op(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         table_columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -461,6 +482,7 @@ where
         Self::new_with_distribution_inner(
             store,
             table_id,
+            table_version,
             table_columns,
             order_types,
             pk_indices,
@@ -475,6 +497,7 @@ where
     async fn new_with_distribution_inner(
         store: S,
         table_id: TableId,
+        table_version: Option<u64>,
         table_columns: Vec<ColumnDesc>,
         order_types: Vec<OrderType>,
         pk_indices: Vec<usize>,
@@ -490,6 +513,7 @@ where
                 table_id,
                 is_consistent_op,
                 TableOption::default(),
+                table_version,
             ))
             .await;
         let data_types: Vec<DataType> = table_columns

@@ -68,6 +68,7 @@ async fn create_executor<S: StateStore>(
     let state_table = StateTable::new_without_distribution(
         store,
         TableId::new(1),
+        None,
         table_columns,
         table_order_types,
         table_pk_indices,

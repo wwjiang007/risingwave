@@ -75,6 +75,7 @@ async fn create_state_table<const USE_WATERMARK_CACHE: bool>(
     TestStateTable::<USE_WATERMARK_CACHE>::new_without_distribution_inconsistent_op(
         store,
         TEST_TABLE_ID,
+        None,
         column_descs,
         order_types,
         pk_indices,

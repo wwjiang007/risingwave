@@ -54,6 +54,10 @@ pub use skip_watermark::*;
 
 use crate::monitor::StoreLocalStatistic;
 
+pub struct ValueMeta {
+    pub table_version: Option<u64>,
+}
+
 /// `HummockIterator` defines the interface of all iterators, including `SstableIterator`,
 /// `MergeIterator`, `UserIterator` and `ConcatIterator`.
 ///
@@ -125,6 +129,8 @@ pub trait HummockIterator: Send + Sync {
 
     /// take local statistic info from iterator to report metrics.
     fn collect_local_statistic(&self, _stats: &mut StoreLocalStatistic);
+
+    fn value_meta(&self) -> ValueMeta;
 }
 
 /// This is a placeholder trait used in `HummockIteratorUnion`
@@ -160,6 +166,10 @@ impl<D: HummockIteratorDirection> HummockIterator for PhantomHummockIterator<D> 
     }
 
     fn collect_local_statistic(&self, _stats: &mut StoreLocalStatistic) {}
+
+    fn value_meta(&self) -> ValueMeta {
+        unreachable!()
+    }
 }
 
 /// The `HummockIteratorUnion` acts like a wrapper over multiple types of `HummockIterator`, so that
@@ -259,6 +269,15 @@ impl<
             Fourth(iter) => iter.collect_local_statistic(stats),
         }
     }
+
+    fn value_meta(&self) -> ValueMeta {
+        match self {
+            First(iter) => iter.value_meta(),
+            Second(iter) => iter.value_meta(),
+            Third(iter) => iter.value_meta(),
+            Fourth(iter) => iter.value_meta(),
+        }
+    }
 }
 
 impl<I: HummockIterator> HummockIterator for Box<I> {
@@ -290,6 +309,10 @@ impl<I: HummockIterator> HummockIterator for Box<I> {
 
     fn collect_local_statistic(&self, stats: &mut StoreLocalStatistic) {
         (*self).deref().collect_local_statistic(stats);
+    }
+
+    fn value_meta(&self) -> ValueMeta {
+        (*self).deref().value_meta()
     }
 }
 
@@ -334,15 +357,22 @@ pub struct FromRustIterator<'a, B: RustIteratorBuilder> {
     )>,
     epoch: EpochWithGap,
     table_id: TableId,
+    table_version: Option<u64>,
 }
 
 impl<'a, B: RustIteratorBuilder> FromRustIterator<'a, B> {
-    pub fn new(inner: &'a B::Iterable, epoch: EpochWithGap, table_id: TableId) -> Self {
+    pub fn new(
+        inner: &'a B::Iterable,
+        epoch: EpochWithGap,
+        table_id: TableId,
+        table_version: Option<u64>,
+    ) -> Self {
         Self {
             inner,
             iter: None,
             epoch,
             table_id,
+            table_version,
         }
     }
 }
@@ -439,6 +469,12 @@ impl<'a, B: RustIteratorBuilder> HummockIterator for FromRustIterator<'a, B> {
     }
 
     fn collect_local_statistic(&self, _stats: &mut StoreLocalStatistic) {}
+
+    fn value_meta(&self) -> ValueMeta {
+        ValueMeta {
+            table_version: self.table_version,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]

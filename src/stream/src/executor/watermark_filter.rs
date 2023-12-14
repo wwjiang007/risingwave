@@ -380,6 +380,7 @@ mod tests {
         StateTable::new_with_distribution_inconsistent_op(
             mem_state,
             TableId::new(table_id),
+            None,
             column_descs,
             order_types.to_vec(),
             pk_indices.to_vec(),

@@ -373,6 +373,7 @@ pub mod agg_executor {
                 let state_table = StateTable::new_without_distribution(
                     store,
                     table_id,
+                    None,
                     column_descs,
                     order_types.clone(),
                     (0..order_types.len()).collect(),
@@ -429,6 +430,7 @@ pub mod agg_executor {
         StateTable::new_without_distribution_inconsistent_op(
             store,
             table_id,
+            None,
             column_descs,
             order_types,
             (0..group_key_indices.len()).collect(),
@@ -611,6 +613,7 @@ pub mod top_n_executor {
         StateTable::new_without_distribution(
             state_store,
             TableId::new(0),
+            None,
             column_descs,
             order_types.to_vec(),
             pk_indices.to_vec(),

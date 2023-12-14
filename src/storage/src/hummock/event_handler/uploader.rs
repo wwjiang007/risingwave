@@ -1222,6 +1222,7 @@ mod tests {
             TEST_TABLE_ID,
             None,
             tracker,
+            None,
         )
     }
 

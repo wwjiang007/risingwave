@@ -58,6 +58,7 @@ pub struct LocalHummockStorage {
     epoch: Option<u64>,
 
     table_id: TableId,
+    table_version: Option<u64>,
     is_consistent_op: bool,
     table_option: TableOption,
 
@@ -150,6 +151,7 @@ impl LocalHummockStorage {
             &self.mem_table.buffer,
             EpochWithGap::new(self.epoch(), self.spill_offset),
             self.table_id,
+            self.table_version,
         )
     }
 
@@ -472,6 +474,7 @@ impl LocalHummockStorage {
                 table_id,
                 Some(instance_id),
                 Some(tracker),
+                self.table_version,
             );
             self.spill_offset += 1;
             let imm_size = imm.size();
@@ -517,6 +520,7 @@ impl LocalHummockStorage {
             spill_offset: 0,
             epoch: None,
             table_id: option.table_id,
+            table_version: option.table_version,
             is_consistent_op: option.is_consistent_op,
             table_option: option.table_option,
             is_replicated: option.is_replicated,

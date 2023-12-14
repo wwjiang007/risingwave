@@ -397,6 +397,7 @@ impl From<TracedWriteOptions> for WriteOptions {
 #[derive(Clone, Default)]
 pub struct NewLocalOptions {
     pub table_id: TableId,
+    pub table_version: Option<u64>,
     /// Whether the operation is consistent. The term `consistent` requires the following:
     ///
     /// 1. A key cannot be inserted or deleted for more than once, i.e. inserting to an existing
@@ -419,6 +420,7 @@ impl From<TracedNewLocalOptions> for NewLocalOptions {
             is_consistent_op: value.is_consistent_op,
             table_option: value.table_option.into(),
             is_replicated: value.is_replicated,
+            table_version: value.table_version,
         }
     }
 }
@@ -430,17 +432,24 @@ impl From<NewLocalOptions> for TracedNewLocalOptions {
             is_consistent_op: value.is_consistent_op,
             table_option: value.table_option.into(),
             is_replicated: value.is_replicated,
+            table_version: value.table_version,
         }
     }
 }
 
 impl NewLocalOptions {
-    pub fn new(table_id: TableId, is_consistent_op: bool, table_option: TableOption) -> Self {
+    pub fn new(
+        table_id: TableId,
+        is_consistent_op: bool,
+        table_option: TableOption,
+        table_version: Option<u64>,
+    ) -> Self {
         NewLocalOptions {
             table_id,
             is_consistent_op,
             table_option,
             is_replicated: false,
+            table_version,
         }
     }
 
@@ -448,12 +457,14 @@ impl NewLocalOptions {
         table_id: TableId,
         is_consistent_op: bool,
         table_option: TableOption,
+        table_version: Option<u64>,
     ) -> Self {
         NewLocalOptions {
             table_id,
             is_consistent_op,
             table_option,
             is_replicated: true,
+            table_version,
         }
     }
 
@@ -465,6 +476,7 @@ impl NewLocalOptions {
                 retention_seconds: None,
             },
             is_replicated: false,
+            table_version: None,
         }
     }
 }

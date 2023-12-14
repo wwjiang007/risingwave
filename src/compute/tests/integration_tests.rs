@@ -444,6 +444,7 @@ async fn test_row_seq_scan() -> Result<()> {
     let mut state = StateTable::new_without_distribution(
         memory_state_store.clone(),
         TableId::from(0x42),
+        None,
         column_descs.clone(),
         vec![OrderType::ascending()],
         vec![0_usize],

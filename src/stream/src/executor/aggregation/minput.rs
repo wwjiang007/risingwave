@@ -337,6 +337,7 @@ mod tests {
         let table = StateTable::new_without_distribution(
             MemoryStateStore::new(),
             table_id,
+            None,
             columns,
             order_types,
             (0..pk_len).collect(),

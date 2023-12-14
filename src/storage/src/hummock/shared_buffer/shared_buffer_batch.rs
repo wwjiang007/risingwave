@@ -31,7 +31,7 @@ use risingwave_hummock_sdk::EpochWithGap;
 use crate::hummock::event_handler::LocalInstanceId;
 use crate::hummock::iterator::{
     Backward, DeleteRangeIterator, DirectionEnum, Forward, HummockIterator,
-    HummockIteratorDirection,
+    HummockIteratorDirection, ValueMeta,
 };
 use crate::hummock::utils::{range_overlap, MemoryTracker};
 use crate::hummock::value::HummockValue;
@@ -357,6 +357,7 @@ pub struct SharedBufferBatch {
     pub(crate) inner: Arc<SharedBufferBatchInner>,
     pub table_id: TableId,
     pub instance_id: LocalInstanceId,
+    pub table_version: Option<u64>,
 }
 
 impl SharedBufferBatch {
@@ -379,6 +380,7 @@ impl SharedBufferBatch {
             )),
             table_id,
             instance_id: LocalInstanceId::default(),
+            table_version: None,
         }
     }
 
@@ -503,7 +505,7 @@ impl SharedBufferBatch {
     }
 
     pub fn into_directed_iter<D: HummockIteratorDirection>(self) -> SharedBufferBatchIterator<D> {
-        SharedBufferBatchIterator::<D>::new(self.inner, self.table_id)
+        SharedBufferBatchIterator::<D>::new(self.inner, self.table_id, self.table_version)
     }
 
     pub fn into_forward_iter(self) -> SharedBufferBatchIterator<Forward> {
@@ -586,6 +588,7 @@ impl SharedBufferBatch {
         table_id: TableId,
         instance_id: Option<LocalInstanceId>,
         tracker: Option<MemoryTracker>,
+        table_version: Option<u64>,
     ) -> Self {
         let inner = SharedBufferBatchInner::new(
             table_id,
@@ -600,6 +603,7 @@ impl SharedBufferBatch {
             inner: Arc::new(inner),
             table_id,
             instance_id: instance_id.unwrap_or_default(),
+            table_version,
         }
     }
 
@@ -652,16 +656,22 @@ pub struct SharedBufferBatchIterator<D: HummockIteratorDirection> {
     // The index of the current entry in the payload
     current_idx: usize,
     table_id: TableId,
+    table_version: Option<u64>,
     _phantom: PhantomData<D>,
 }
 
 impl<D: HummockIteratorDirection> SharedBufferBatchIterator<D> {
-    pub(crate) fn new(inner: Arc<SharedBufferBatchInner>, table_id: TableId) -> Self {
+    pub(crate) fn new(
+        inner: Arc<SharedBufferBatchInner>,
+        table_id: TableId,
+        table_version: Option<u64>,
+    ) -> Self {
         Self {
             inner,
             current_idx: 0,
             current_version_idx: 0,
             table_id,
+            table_version,
             _phantom: Default::default(),
         }
     }
@@ -828,6 +838,12 @@ impl<D: HummockIteratorDirection> HummockIterator for SharedBufferBatchIterator<
     }
 
     fn collect_local_statistic(&self, _stats: &mut crate::monitor::StoreLocalStatistic) {}
+
+    fn value_meta(&self) -> ValueMeta {
+        ValueMeta {
+            table_version: self.table_version,
+        }
+    }
 }
 
 pub struct SharedBufferDeleteRangeIterator {
@@ -1009,6 +1025,7 @@ mod tests {
             TableId::new(0),
             None,
             None,
+            None,
         );
         assert_eq!(batch.start_table_key().as_ref(), "a".as_bytes());
         assert_eq!(
@@ -1181,6 +1198,7 @@ mod tests {
             0,
             delete_ranges,
             Default::default(),
+            None,
             None,
             None,
         );
@@ -1476,6 +1494,7 @@ mod tests {
             table_id,
             None,
             None,
+            None,
         );
 
         let epoch = 2;
@@ -1520,6 +1539,7 @@ mod tests {
             size,
             delete_ranges,
             table_id,
+            None,
             None,
             None,
         );

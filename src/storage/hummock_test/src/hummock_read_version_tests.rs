@@ -61,6 +61,7 @@ async fn test_read_version_basic() {
             TableId::from(table_id),
             None,
             None,
+            None,
         );
 
         read_version.update(VersionUpdate::Staging(StagingData::ImmMem(imm)));
@@ -98,6 +99,7 @@ async fn test_read_version_basic() {
                 size,
                 vec![],
                 TableId::from(table_id),
+                None,
                 None,
                 None,
             );
@@ -282,6 +284,7 @@ async fn test_read_filter_basic() {
             size,
             vec![],
             TableId::from(table_id),
+            None,
             None,
             None,
         );

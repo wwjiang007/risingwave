@@ -1287,6 +1287,7 @@ mod tests {
         let state_table = StateTable::new_without_distribution(
             mem_state.clone(),
             TableId::new(table_id),
+            None,
             column_descs,
             order_types.to_vec(),
             pk_indices.to_vec(),
@@ -1308,6 +1309,7 @@ mod tests {
         let degree_state_table = StateTable::new_without_distribution(
             mem_state,
             TableId::new(table_id + 1),
+            None,
             degree_table_column_descs,
             order_types.to_vec(),
             pk_indices.to_vec(),

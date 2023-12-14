@@ -877,6 +877,7 @@ mod tests {
             &mem_table.buffer,
             EpochWithGap::new_from_epoch(TEST_EPOCH),
             TEST_TABLE_ID,
+            None,
         );
 
         // Test rewind

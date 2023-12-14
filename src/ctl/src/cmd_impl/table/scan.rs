@@ -59,6 +59,7 @@ pub async fn make_state_table<S: StateStore>(hummock: S, table: &TableCatalog) -
     StateTable::new_with_distribution(
         hummock,
         table.id,
+        table.version.clone().map(|v| v.version_id),
         table
             .columns()
             .iter()

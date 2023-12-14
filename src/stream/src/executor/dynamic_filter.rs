@@ -506,6 +506,7 @@ mod tests {
         let state_table_l = StateTable::new_without_distribution_inconsistent_op(
             mem_state.clone(),
             TableId::new(0),
+            None,
             vec![column_descs.clone()],
             vec![OrderType::ascending()],
             vec![0],
@@ -514,6 +515,7 @@ mod tests {
         let state_table_r = StateTable::new_without_distribution_inconsistent_op(
             mem_state,
             TableId::new(1),
+            None,
             vec![column_descs],
             vec![OrderType::ascending()],
             vec![0],

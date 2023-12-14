@@ -28,7 +28,7 @@ use risingwave_pb::hummock::SstableInfo;
 
 use crate::hummock::block_stream::BlockDataStream;
 use crate::hummock::compactor::task_progress::TaskProgress;
-use crate::hummock::iterator::{Forward, HummockIterator};
+use crate::hummock::iterator::{Forward, HummockIterator, ValueMeta};
 use crate::hummock::sstable_store::SstableStoreRef;
 use crate::hummock::value::HummockValue;
 use crate::hummock::{BlockHolder, BlockIterator, BlockMeta, HummockResult};
@@ -487,6 +487,10 @@ impl HummockIterator for ConcatSstableIterator {
 
     fn collect_local_statistic(&self, stats: &mut StoreLocalStatistic) {
         stats.add(&self.stats)
+    }
+
+    fn value_meta(&self) -> ValueMeta {
+        todo!("#12224 read from SstableStreamIterator's metadata")
     }
 }
 

@@ -247,6 +247,7 @@ mod tests {
         let state_table = StateTable::new_without_distribution(
             state_store,
             table_id,
+            None,
             column_descs,
             order_types,
             pk_indices.clone(),

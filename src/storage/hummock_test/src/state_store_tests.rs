@@ -1386,6 +1386,7 @@ async fn test_replicated_local_hummock_storage() {
             TableOption {
                 retention_seconds: None,
             },
+            None,
         ))
         .await;
 

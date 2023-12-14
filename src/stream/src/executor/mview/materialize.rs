@@ -249,6 +249,7 @@ impl<S: StateStore> MaterializeExecutor<S, BasicSerde> {
         let state_table = StateTableInner::new_without_distribution(
             store,
             table_id,
+            None,
             columns,
             arrange_order_types,
             arrange_columns.clone(),

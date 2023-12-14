@@ -138,6 +138,7 @@ impl From<TracedTableOption> for TableOption {
 #[derive(Encode, Decode, PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct TracedNewLocalOptions {
     pub table_id: TracedTableId,
+    pub table_version: Option<u64>,
     pub is_consistent_op: bool,
     pub table_option: TracedTableOption,
     pub is_replicated: bool,
@@ -153,6 +154,7 @@ impl TracedNewLocalOptions {
                 retention_seconds: None,
             },
             is_replicated: false,
+            table_version: None,
         }
     }
 }

@@ -330,6 +330,11 @@ pub async fn merge_imms_in_memory(
 
     let mut imm_iters = Vec::with_capacity(imms.len());
     let mut del_iter = ForwardMergeRangeIterator::new(HummockEpoch::MAX);
+    let table_version = if imms.is_empty() {
+        None
+    } else {
+        imms[0].table_version
+    };
     for imm in imms {
         assert!(
             imm.kv_count() > 0 || imm.has_range_tombstone(),
@@ -339,6 +344,11 @@ pub async fn merge_imms_in_memory(
             table_id,
             imm.table_id(),
             "should only merge data belonging to the same table"
+        );
+        assert_eq!(
+            table_version, imm.table_version,
+            "table version of imms differ, {:?}, {:?}",
+            table_version, imm.table_version
         );
 
         merged_imm_ids.push(imm.batch_id());
@@ -473,6 +483,7 @@ pub async fn merge_imms_in_memory(
         )),
         table_id,
         instance_id,
+        table_version,
     })
 }
 

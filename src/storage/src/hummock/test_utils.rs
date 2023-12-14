@@ -415,6 +415,7 @@ pub mod delete_range {
                 table_id,
                 None,
                 None,
+                None,
             );
             self.iter.add_batch_iter(batch.delete_range_iter());
         }

@@ -36,6 +36,7 @@ pub async fn gen_basic_table(row_count: usize) -> StorageTable<MemoryStateStore>
     let mut state = StateTable::new_without_distribution(
         state_store.clone(),
         TableId::from(0x42),
+        None,
         column_descs.clone(),
         order_types,
         pk_indices,

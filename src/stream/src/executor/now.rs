@@ -405,6 +405,7 @@ mod tests {
         let state_table = StateTable::new_without_distribution(
             state_store.clone(),
             table_id,
+            None,
             column_descs,
             vec![],
             vec![],

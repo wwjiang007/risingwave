@@ -221,6 +221,7 @@ impl<S: StateStore> LogStoreFactory for KvLogStoreFactory<S> {
                     retention_seconds: None,
                 },
                 is_replicated: false,
+                table_version: self.table_catalog.version.map(|tv| tv.version),
             })
             .await;
 

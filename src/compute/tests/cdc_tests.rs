@@ -218,6 +218,7 @@ async fn test_cdc_backfill() -> StreamResult<()> {
     let state_table = StateTable::new_without_distribution(
         memory_state_store.clone(),
         TableId::from(0x42),
+        None,
         column_descs.clone(),
         vec![OrderType::ascending()],
         vec![0_usize],
