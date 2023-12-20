@@ -10,6 +10,7 @@ download-and-decompress-artifact risingwave_simulation .
 chmod +x ./risingwave_simulation
 
 export RUST_LOG="risingwave_meta=info,\
+risingwave_stream::executor::backfill=debug,\
 risingwave_meta::barrier::recovery=debug,\
 risingwave_meta::manager::catalog=debug,\
 risingwave_meta::rpc::ddl_controller=debug,\

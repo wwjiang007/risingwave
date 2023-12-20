@@ -165,7 +165,7 @@ where
             mut old_state,
         } = Self::recover_backfill_state(self.state_table.as_ref(), pk_in_output_indices.len())
             .await?;
-        tracing::trace!(is_finished, row_count, "backfill state recovered");
+        tracing::debug!(is_finished, row_count, "backfill state recovered");
 
         let mut builder = create_builder(
             rate_limit,
@@ -473,7 +473,7 @@ where
             }
         }
 
-        tracing::trace!("Backfill has finished, waiting for barrier");
+        tracing::debug!("Backfill has finished, waiting for barrier");
 
         // Wait for first barrier to come after backfill is finished.
         // So we can update our progress + persist the status.
@@ -534,7 +534,7 @@ where
             }
         }
 
-        tracing::trace!(
+        tracing::debug!(
             "Backfill has already finished and forward messages directly to the downstream"
         );
 
