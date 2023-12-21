@@ -1036,6 +1036,7 @@ impl GlobalBarrierManager {
             self.failure_recovery(err, fail_nodes, state, checkpoint_control)
                 .await;
         }
+        tracing::debug!("Completed epoch {}", prev_epoch);
     }
 
     async fn failure_recovery(

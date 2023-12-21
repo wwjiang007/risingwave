@@ -16,7 +16,9 @@ risingwave_meta::manager::catalog=debug,\
 risingwave_compute::server=debug,\
 risingwave_meta::rpc::ddl_controller=debug,\
 risingwave_meta::barrier::mod=debug,\
-risingwave_simulation=debug"
+risingwave_meta::barrier::stream=stream_manager=debug,\
+risingwave_simulation=debug,\
+rw_tracing=info"
 export LOGDIR=.risingwave/log
 
 mkdir -p $LOGDIR
