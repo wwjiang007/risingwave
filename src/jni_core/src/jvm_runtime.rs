@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 use anyhow::{anyhow, bail, Context};
 use jni::strings::JNIString;
-use jni::{InitArgsBuilder, JNIVersion, JavaVM, NativeMethod};
+use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM, NativeMethod};
 use risingwave_common::util::resource_util::memory::system_memory_available_bytes;
 use thiserror_ext::AsReport;
 use tracing::error;
@@ -195,4 +195,17 @@ pub fn load_jvm_memory_stats() -> (usize, usize) {
         }
         _ => (0, 0),
     }
+}
+
+pub fn execute_with_jni_env<T>(
+    jvm: &JavaVM,
+    f: impl FnOnce(&mut JNIEnv<'_>) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let _guard = jvm
+        .attach_current_thread()
+        .with_context(|| "Failed to attach current rust thread to jvm")?;
+
+    let mut env = jvm.get_env().with_context(|| "Failed to get jni env")?;
+
+    f(&mut env)
 }
