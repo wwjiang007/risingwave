@@ -614,7 +614,7 @@ impl CompleteStreamFragmentGraph {
                             let mview_id = GlobalFragmentId::new(mview_fragment.fragment_id);
 
                             // Resolve the required output columns from the upstream materialized view.
-                            let output_indices = {
+                            let (dist_key_indices, output_indices) = {
                                 let nodes = mview_fragment.actors[0].get_nodes().unwrap();
                                 let mview_node =
                                     nodes.get_node_body().unwrap().as_materialize().unwrap();
@@ -625,8 +625,16 @@ impl CompleteStreamFragmentGraph {
                                     .iter()
                                     .map(|c| c.column_desc.as_ref().unwrap().column_id)
                                     .collect_vec();
+                                let dist_key_indices = mview_node
+                                    .table
+                                    .as_ref()
+                                    .unwrap()
+                                    .distribution_key
+                                    .iter()
+                                    .map(|i| *i as u32)
+                                    .collect();
 
-                                output_columns
+                                let output_indices = output_columns
                                     .iter()
                                     .map(|c| {
                                         all_column_ids
@@ -635,7 +643,10 @@ impl CompleteStreamFragmentGraph {
                                             .map(|i| i as u32)
                                     })
                                     .collect::<Option<Vec<_>>>()
-                                    .context("column not found in the upstream materialized view")?
+                                    .context(
+                                        "column not found in the upstream materialized view",
+                                    )?;
+                                (dist_key_indices, output_indices)
                             };
                             let edge = StreamFragmentEdge {
                                 id: EdgeId::UpstreamExternal {
@@ -646,8 +657,8 @@ impl CompleteStreamFragmentGraph {
                                 // `Materialize` and the downstream `StreamScan` of the
                                 // new materialized view.
                                 dispatch_strategy: DispatchStrategy {
-                                    r#type: DispatcherType::NoShuffle as _,
-                                    dist_key_indices: vec![], // not used for `NoShuffle`
+                                    r#type: DispatcherType::Hash as _,
+                                    dist_key_indices,
                                     output_indices,
                                 },
                             };
