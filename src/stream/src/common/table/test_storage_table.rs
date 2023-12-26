@@ -36,7 +36,7 @@ async fn test_storage_table_value_indices() {
     const TEST_TABLE_ID: TableId = TableId { table_id: 233 };
     let test_env = prepare_hummock_test_env().await;
 
-    let column_ids = vec![
+    let column_ids = [
         ColumnId::from(0),
         ColumnId::from(1),
         ColumnId::from(2),
@@ -111,7 +111,7 @@ async fn test_storage_table_value_indices() {
 
     epoch.inc();
     state
-        .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+        .barrier(&Barrier::with_epoch_pair_for_test(epoch))
         .await
         .unwrap();
     test_env.commit_epoch(epoch.prev).await;
@@ -176,7 +176,7 @@ async fn test_shuffled_column_id_for_storage_table_get_row() {
     const TEST_TABLE_ID: TableId = TableId { table_id: 233 };
     let test_env = prepare_hummock_test_env().await;
 
-    let column_ids = vec![ColumnId::from(3), ColumnId::from(2), ColumnId::from(1)];
+    let column_ids = [ColumnId::from(3), ColumnId::from(2), ColumnId::from(1)];
     let column_descs = vec![
         ColumnDesc::unnamed(column_ids[0], DataType::Int32),
         ColumnDesc::unnamed(column_ids[1], DataType::Int32),
@@ -227,7 +227,7 @@ async fn test_shuffled_column_id_for_storage_table_get_row() {
 
     epoch.inc();
     state
-        .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+        .barrier(&Barrier::with_epoch_pair_for_test(epoch))
         .await
         .unwrap();
     test_env.commit_epoch(epoch.prev).await;
@@ -281,7 +281,7 @@ async fn test_row_based_storage_table_point_get_in_batch_mode() {
     const TEST_TABLE_ID: TableId = TableId { table_id: 233 };
     let test_env = prepare_hummock_test_env().await;
 
-    let column_ids = vec![ColumnId::from(0), ColumnId::from(1), ColumnId::from(2)];
+    let column_ids = [ColumnId::from(0), ColumnId::from(1), ColumnId::from(2)];
     let column_descs = vec![
         ColumnDesc::unnamed(column_ids[0], DataType::Int32),
         ColumnDesc::unnamed(column_ids[1], DataType::Int32),
@@ -337,7 +337,7 @@ async fn test_row_based_storage_table_point_get_in_batch_mode() {
     ]));
     epoch.inc();
     state
-        .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+        .barrier(&Barrier::with_epoch_pair_for_test(epoch))
         .await
         .unwrap();
     test_env.commit_epoch(epoch.prev).await;
@@ -387,7 +387,7 @@ async fn test_batch_scan_with_value_indices() {
     let test_env = prepare_hummock_test_env().await;
 
     let order_types = vec![OrderType::ascending(), OrderType::descending()];
-    let column_ids = vec![
+    let column_ids = [
         ColumnId::from(0),
         ColumnId::from(1),
         ColumnId::from(2),
@@ -455,7 +455,7 @@ async fn test_batch_scan_with_value_indices() {
 
     epoch.inc();
     state
-        .barrier(&Barrier::with_prev_epoch_for_test(epoch.curr, epoch.prev))
+        .barrier(&Barrier::with_epoch_pair_for_test(epoch))
         .await
         .unwrap();
     test_env.commit_epoch(epoch.prev).await;

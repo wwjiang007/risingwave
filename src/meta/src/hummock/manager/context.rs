@@ -18,11 +18,11 @@ use std::ops::DerefMut;
 use fail::fail_point;
 use function_name::named;
 use itertools::Itertools;
+use risingwave_hummock_sdk::version::HummockVersion;
 use risingwave_hummock_sdk::{
     ExtendedSstableInfo, HummockContextId, HummockEpoch, HummockSstableObjectId,
 };
-use risingwave_pb::hummock::subscribe_compact_tasks_response::Task;
-use risingwave_pb::hummock::{HummockVersion, ValidationTask};
+use risingwave_pb::hummock::ValidationTask;
 
 use crate::hummock::error::{Error, Result};
 use crate::hummock::manager::{
@@ -31,16 +31,12 @@ use crate::hummock::manager::{
 use crate::hummock::HummockManager;
 use crate::manager::META_NODE_ID;
 use crate::model::{BTreeMapTransaction, ValTransaction};
-use crate::storage::{MetaStore, Transaction};
+use crate::storage::Transaction;
 
-impl<S> HummockManager<S>
-where
-    S: MetaStore,
-{
+impl HummockManager {
     /// Release resources pinned by these contexts, including:
     /// - Version
     /// - Snapshot
-    /// - Compaction task
     #[named]
     pub async fn release_contexts(
         &self,
@@ -52,14 +48,7 @@ where
         fail_point!("release_contexts_internal_err", |_| Err(Error::Internal(
             anyhow::anyhow!("failpoint internal error")
         )));
-        let mut compaction_guard = write_lock!(self, compaction).await;
-        let compaction = compaction_guard.deref_mut();
-        let (compact_statuses, compact_task_assignment) =
-            compaction.cancel_assigned_tasks_for_context_ids(context_ids.as_ref());
-        for context_id in context_ids.as_ref() {
-            self.compactor_manager
-                .purge_heartbeats_for_context(*context_id);
-        }
+
         let mut versioning_guard = write_lock!(self, versioning).await;
         let versioning = versioning_guard.deref_mut();
         let mut pinned_versions = BTreeMapTransaction::new(&mut versioning.pinned_versions);
@@ -72,8 +61,6 @@ where
             self,
             None,
             Transaction::default(),
-            compact_statuses,
-            compact_task_assignment,
             pinned_versions,
             pinned_snapshots
         )?;
@@ -81,7 +68,6 @@ where
         #[cfg(test)]
         {
             drop(versioning_guard);
-            drop(compaction_guard);
             self.check_state_consistency().await;
         }
 
@@ -127,13 +113,15 @@ where
         Ok(invalid_context_ids)
     }
 
-    pub(crate) async fn commit_epoch_sanity_check(
+    pub async fn commit_epoch_sanity_check(
         &self,
         epoch: HummockEpoch,
         sstables: &Vec<ExtendedSstableInfo>,
         sst_to_context: &HashMap<HummockSstableObjectId, HummockContextId>,
         current_version: &HummockVersion,
     ) -> Result<()> {
+        use risingwave_pb::hummock::subscribe_compaction_event_response::Event as ResponseEvent;
+
         for (sst_id, context_id) in sst_to_context {
             #[cfg(test)]
             {
@@ -174,12 +162,11 @@ where
                 .map(|ExtendedSstableInfo { sst_info, .. }| sst_info.clone())
                 .collect_vec();
             if compactor
-                .send_task(Task::ValidationTask(ValidationTask {
+                .send_event(ResponseEvent::ValidationTask(ValidationTask {
                     sst_infos,
                     sst_id_to_worker_id: sst_to_context.clone(),
                     epoch,
                 }))
-                .await
                 .is_err()
             {
                 tracing::warn!("Skip committed SST sanity check due to send failure");
