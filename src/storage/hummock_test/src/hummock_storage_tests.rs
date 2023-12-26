@@ -530,6 +530,8 @@ async fn test_state_store_sync() {
         .await
         .unwrap();
 
+    hummock_storage.seal_current_epoch(u64::MAX, SealCurrentEpochOptions::for_test());
+
     let res = test_env.storage.seal_and_sync_epoch(epoch1).await.unwrap();
     test_env
         .meta_client
@@ -734,6 +736,8 @@ async fn test_delete_get() {
         )
         .await
         .unwrap();
+    let epoch2 = initial_epoch + 2;
+    hummock_storage.seal_current_epoch(epoch2, SealCurrentEpochOptions::for_test());
 
     let res = test_env.storage.seal_and_sync_epoch(epoch1).await.unwrap();
     test_env
@@ -741,8 +745,6 @@ async fn test_delete_get() {
         .commit_epoch(epoch1, res.uncommitted_ssts)
         .await
         .unwrap();
-    let epoch2 = initial_epoch + 2;
-    hummock_storage.seal_current_epoch(epoch2, SealCurrentEpochOptions::for_test_non_checkpoint());
     let batch2 = vec![(
         gen_key_from_str(VirtualNode::ZERO, "bb"),
         StorageValue::new_delete(),

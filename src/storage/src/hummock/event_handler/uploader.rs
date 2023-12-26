@@ -15,9 +15,8 @@
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::{Debug, Display, Formatter};
-use std::future::Future;
+use std::future::{poll_fn, Future};
 use std::mem::swap;
-use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
@@ -318,11 +317,23 @@ struct UnsealedEpochData {
     // newer data at the front
     imms: VecDeque<ImmutableMemtable>,
     spilled_data: SpilledData,
+    is_checkpoint: Option<bool>,
 
     table_watermarks: HashMap<TableId, (WatermarkDirection, Vec<VnodeWatermark>, BitmapBuilder)>,
 }
 
 impl UnsealedEpochData {
+    fn check_is_checkpoint(&mut self, is_checkpoint: bool) {
+        match self.is_checkpoint {
+            None => {
+                self.is_checkpoint = Some(is_checkpoint);
+            }
+            Some(prev_is_checkpoint) => {
+                assert_eq!(prev_is_checkpoint, is_checkpoint);
+            }
+        }
+    }
+
     fn flush(&mut self, context: &UploaderContext) {
         let imms = self.imms.drain(..).collect_vec();
         if !imms.is_empty() {
@@ -399,6 +410,9 @@ struct SealedData {
     spilled_data: SpilledData,
 
     table_watermarks: HashMap<TableId, TableWatermarks>,
+
+    // default to be false
+    sealed_with_checkpoint: bool,
 }
 
 impl SealedData {
@@ -449,6 +463,14 @@ impl SealedData {
                 epoch,
                 prev_max_sealed_epoch
             );
+        }
+
+        if unseal_epoch_data
+            .is_checkpoint
+            .expect("should have sealed local")
+        {
+            assert!(!self.sealed_with_checkpoint);
+            self.sealed_with_checkpoint = true;
         }
 
         // rearrange sealed imms by table shard and in epoch descending order
@@ -776,6 +798,7 @@ impl HummockUploader {
             );
             unsealed_data.add_table_watermarks(table_id, table_watermarks, direction);
         }
+        unsealed_data.check_is_checkpoint(options.is_checkpoint);
     }
 
     pub(crate) fn seal_epoch(&mut self, epoch: HummockEpoch) {
@@ -890,8 +913,11 @@ impl HummockUploader {
                     uploaded_data,
                 },
             table_watermarks,
+            sealed_with_checkpoint,
             ..
         } = self.sealed_data.drain();
+
+        assert!(sealed_with_checkpoint);
 
         assert!(
             imms_by_table_shard.is_empty(),
@@ -996,10 +1022,6 @@ impl HummockUploader {
 
         // TODO: call `abort` on the uploading task join handle
     }
-
-    pub(crate) fn next_event(&mut self) -> NextUploaderEvent<'_> {
-        NextUploaderEvent { uploader: self }
-    }
 }
 
 impl HummockUploader {
@@ -1091,10 +1113,6 @@ impl HummockUploader {
     }
 }
 
-pub(crate) struct NextUploaderEvent<'a> {
-    uploader: &'a mut HummockUploader,
-}
-
 pub(crate) enum UploaderEvent {
     // staging sstable info of newer data comes first
     SyncFinish(HummockEpoch, Vec<StagingSstableInfo>),
@@ -1102,30 +1120,28 @@ pub(crate) enum UploaderEvent {
     ImmMerged(MergeImmTaskOutput),
 }
 
-impl<'a> Future for NextUploaderEvent<'a> {
-    type Output = UploaderEvent;
+impl HummockUploader {
+    pub(crate) fn next_event(&mut self) -> impl Future<Output = UploaderEvent> + '_ {
+        poll_fn(|cx| {
+            if let Some((epoch, newly_uploaded_sstables)) = ready!(self.poll_syncing_task(cx)) {
+                return Poll::Ready(UploaderEvent::SyncFinish(epoch, newly_uploaded_sstables));
+            }
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let uploader = &mut self.deref_mut().uploader;
+            if let Some(sstable_info) = ready!(self.poll_sealed_spill_task(cx)) {
+                return Poll::Ready(UploaderEvent::DataSpilled(sstable_info));
+            }
 
-        if let Some((epoch, newly_uploaded_sstables)) = ready!(uploader.poll_syncing_task(cx)) {
-            return Poll::Ready(UploaderEvent::SyncFinish(epoch, newly_uploaded_sstables));
-        }
+            if let Some(sstable_info) = ready!(self.poll_unsealed_spill_task(cx)) {
+                return Poll::Ready(UploaderEvent::DataSpilled(sstable_info));
+            }
 
-        if let Some(sstable_info) = ready!(uploader.poll_sealed_spill_task(cx)) {
-            return Poll::Ready(UploaderEvent::DataSpilled(sstable_info));
-        }
-
-        if let Some(sstable_info) = ready!(uploader.poll_unsealed_spill_task(cx)) {
-            return Poll::Ready(UploaderEvent::DataSpilled(sstable_info));
-        }
-
-        if let Some(merge_output) = ready!(uploader.poll_sealed_merge_imm_task(cx)) {
-            // add the merged imm into sealed data
-            uploader.update_sealed_data(&merge_output.merged_imm);
-            return Poll::Ready(UploaderEvent::ImmMerged(merge_output));
-        }
-        Poll::Pending
+            if let Some(merge_output) = ready!(self.poll_sealed_merge_imm_task(cx)) {
+                // add the merged imm into sealed data
+                self.update_sealed_data(&merge_output.merged_imm);
+                return Poll::Ready(UploaderEvent::ImmMerged(merge_output));
+            }
+            Poll::Pending
+        })
     }
 }
 
@@ -1173,6 +1189,7 @@ mod tests {
     use crate::monitor::HummockStateStoreMetrics;
     use crate::opts::StorageOpts;
     use crate::storage_value::StorageValue;
+    use crate::store::SealCurrentEpochOptions;
 
     const INITIAL_EPOCH: HummockEpoch = 5;
     const TEST_TABLE_ID: TableId = TableId { table_id: 233 };
@@ -1381,6 +1398,7 @@ mod tests {
                 .imms
                 .len()
         );
+        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         uploader.seal_epoch(epoch1);
         assert_eq!(epoch1, uploader.max_sealed_epoch);
         assert!(uploader.unsealed_data.is_empty());
@@ -1429,7 +1447,7 @@ mod tests {
     async fn test_uploader_merge_imms_without_flush() {
         let mut uploader = test_uploader(dummy_success_upload_future);
         let mut all_imms = VecDeque::new();
-        // assume a chckpoint consists of 11 epochs
+        // assume a checkpoint consists of 11 epochs
         let ckpt_intervals = 11;
         let imm_merge_threshold: usize = uploader.imm_merge_threshold();
 
@@ -1452,6 +1470,12 @@ mod tests {
             // newer imm comes in front
             all_imms.push_front(imm1);
             all_imms.push_front(imm2);
+
+            uploader.local_seal_epoch(
+                epoch,
+                TEST_TABLE_ID,
+                SealCurrentEpochOptions::for_test_non_checkpoint(),
+            );
 
             uploader.seal_epoch(epoch);
 
@@ -1528,9 +1552,11 @@ mod tests {
         let mut uploader = test_uploader(dummy_success_upload_future);
         let epoch1 = INITIAL_EPOCH + 1;
         let epoch2 = INITIAL_EPOCH + 2;
+        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         let imm = gen_imm(epoch2).await;
         // epoch1 is empty while epoch2 is not. Going to seal empty epoch1.
         uploader.add_imm(imm);
+
         uploader.seal_epoch(epoch1);
         assert_eq!(epoch1, uploader.max_sealed_epoch);
 
@@ -1683,6 +1709,7 @@ mod tests {
         assert_eq!(epoch2, uploader.max_syncing_epoch);
         assert_eq!(epoch2, uploader.max_sealed_epoch);
 
+        uploader.local_seal_epoch(epoch6, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         uploader.seal_epoch(epoch6);
         assert_eq!(epoch6, uploader.max_sealed_epoch);
         uploader.update_pinned_version(version3);
@@ -1832,10 +1859,12 @@ mod tests {
         let imm1_4 = gen_imm_with_limiter(epoch1, memory_limiter).await;
         uploader.add_imm(imm1_4.clone());
         let (await_start1_4, finish_tx1_4) = new_task_notifier(vec![imm1_4.batch_id()]);
+        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         uploader.seal_epoch(epoch1);
         uploader.start_sync_epoch(epoch1);
         await_start1_4.await;
 
+        uploader.local_seal_epoch(epoch2, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         uploader.seal_epoch(epoch2);
 
         // current uploader state:
@@ -1934,6 +1963,11 @@ mod tests {
         // synced: epoch1: sst([imm1_4]), sst([imm1_3]), sst([imm1_2, imm1_1])
         //         epoch2: sst([imm2])
 
+        uploader.local_seal_epoch(
+            epoch3,
+            TEST_TABLE_ID,
+            SealCurrentEpochOptions::for_test_non_checkpoint(),
+        );
         uploader.seal_epoch(epoch3);
         if let UploaderEvent::DataSpilled(sst) = uploader.next_event().await {
             assert_eq!(&vec![imm3_1.batch_id()], sst.imm_ids());
@@ -1948,6 +1982,7 @@ mod tests {
         // synced: epoch1: sst([imm1_4]), sst([imm1_3]), sst([imm1_2, imm1_1])
         //         epoch2: sst([imm2])
 
+        uploader.local_seal_epoch(epoch4, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         uploader.seal_epoch(epoch4);
         let (await_start4_with_3_3, finish_tx4_with_3_3) =
             new_task_notifier(vec![imm4.batch_id(), imm3_3.batch_id()]);

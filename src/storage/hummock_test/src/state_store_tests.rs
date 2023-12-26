@@ -1059,7 +1059,6 @@ async fn test_delete_get_inner(
         .uncommitted_ssts;
     meta_client.commit_epoch(epoch1, ssts).await.unwrap();
 
-    local.seal_current_epoch(epoch2, SealCurrentEpochOptions::for_test());
     let batch2 = vec![(
         gen_key_from_str(VirtualNode::ZERO, "bb"),
         StorageValue::new_delete(),
