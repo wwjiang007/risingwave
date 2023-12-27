@@ -580,9 +580,10 @@ impl HummockEventHandler {
                 epoch,
                 opts,
                 table_id,
-                ..
+                instance_id,
             } => {
-                self.uploader.local_seal_epoch(epoch, table_id, opts);
+                self.uploader
+                    .local_seal_epoch(epoch, table_id, instance_id, opts);
             }
 
             #[cfg(any(test, feature = "test"))]

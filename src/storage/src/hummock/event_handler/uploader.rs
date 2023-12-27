@@ -786,6 +786,7 @@ impl HummockUploader {
         &mut self,
         epoch: u64,
         table_id: TableId,
+        _instance_id: LocalInstanceId,
         options: SealCurrentEpochOptions,
     ) {
         let unsealed_data = self.unsealed_data.entry(epoch).or_default();
@@ -1193,6 +1194,7 @@ mod tests {
 
     const INITIAL_EPOCH: HummockEpoch = 5;
     const TEST_TABLE_ID: TableId = TableId { table_id: 233 };
+    const TEST_INSTANCE_ID: LocalInstanceId = 233;
 
     pub trait UploadOutputFuture =
         Future<Output = HummockResult<UploadTaskOutput>> + Send + 'static;
@@ -1237,7 +1239,7 @@ mod tests {
             size,
             vec![],
             TEST_TABLE_ID,
-            None,
+            Some(TEST_INSTANCE_ID),
             tracker,
         )
     }
@@ -1398,7 +1400,12 @@ mod tests {
                 .imms
                 .len()
         );
-        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
+        uploader.local_seal_epoch(
+            epoch1,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         uploader.seal_epoch(epoch1);
         assert_eq!(epoch1, uploader.max_sealed_epoch);
         assert!(uploader.unsealed_data.is_empty());
@@ -1468,12 +1475,19 @@ mod tests {
             uploader.add_imm(imm2.clone());
 
             // newer imm comes in front
-            all_imms.push_front(imm1);
-            all_imms.push_front(imm2);
+            all_imms.push_front(imm1.clone());
+            all_imms.push_front(imm2.clone());
 
             uploader.local_seal_epoch(
                 epoch,
                 TEST_TABLE_ID,
+                imm1.instance_id,
+                SealCurrentEpochOptions::for_test_non_checkpoint(),
+            );
+            uploader.local_seal_epoch(
+                epoch,
+                TEST_TABLE_ID,
+                imm2.instance_id,
                 SealCurrentEpochOptions::for_test_non_checkpoint(),
             );
 
@@ -1552,8 +1566,13 @@ mod tests {
         let mut uploader = test_uploader(dummy_success_upload_future);
         let epoch1 = INITIAL_EPOCH + 1;
         let epoch2 = INITIAL_EPOCH + 2;
-        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
         let imm = gen_imm(epoch2).await;
+        uploader.local_seal_epoch(
+            epoch1,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         // epoch1 is empty while epoch2 is not. Going to seal empty epoch1.
         uploader.add_imm(imm);
 
@@ -1703,13 +1722,20 @@ mod tests {
         assert_eq!(epoch1, uploader.max_syncing_epoch);
         assert_eq!(epoch1, uploader.max_sealed_epoch);
 
-        uploader.add_imm(gen_imm(epoch6).await);
+        let imm = gen_imm(epoch6).await;
+
+        uploader.add_imm(imm.clone());
         uploader.update_pinned_version(version2);
         assert_eq!(epoch2, uploader.max_synced_epoch);
         assert_eq!(epoch2, uploader.max_syncing_epoch);
         assert_eq!(epoch2, uploader.max_sealed_epoch);
 
-        uploader.local_seal_epoch(epoch6, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
+        uploader.local_seal_epoch(
+            epoch6,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         uploader.seal_epoch(epoch6);
         assert_eq!(epoch6, uploader.max_sealed_epoch);
         uploader.update_pinned_version(version3);
@@ -1728,8 +1754,7 @@ mod tests {
             UploaderEvent::SyncFinish(epoch, _) => {
                 assert_eq!(epoch6, epoch);
             }
-            UploaderEvent::DataSpilled(_) => unreachable!(),
-            UploaderEvent::ImmMerged(_) => unreachable!(),
+            UploaderEvent::DataSpilled(_) | UploaderEvent::ImmMerged(_) => unreachable!(),
         }
         uploader.update_pinned_version(version5);
         assert_eq!(epoch6, uploader.max_synced_epoch);
@@ -1859,12 +1884,22 @@ mod tests {
         let imm1_4 = gen_imm_with_limiter(epoch1, memory_limiter).await;
         uploader.add_imm(imm1_4.clone());
         let (await_start1_4, finish_tx1_4) = new_task_notifier(vec![imm1_4.batch_id()]);
-        uploader.local_seal_epoch(epoch1, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
+        uploader.local_seal_epoch(
+            epoch1,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         uploader.seal_epoch(epoch1);
         uploader.start_sync_epoch(epoch1);
         await_start1_4.await;
 
-        uploader.local_seal_epoch(epoch2, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
+        uploader.local_seal_epoch(
+            epoch2,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         uploader.seal_epoch(epoch2);
 
         // current uploader state:
@@ -1966,6 +2001,7 @@ mod tests {
         uploader.local_seal_epoch(
             epoch3,
             TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
             SealCurrentEpochOptions::for_test_non_checkpoint(),
         );
         uploader.seal_epoch(epoch3);
@@ -1982,7 +2018,12 @@ mod tests {
         // synced: epoch1: sst([imm1_4]), sst([imm1_3]), sst([imm1_2, imm1_1])
         //         epoch2: sst([imm2])
 
-        uploader.local_seal_epoch(epoch4, TEST_TABLE_ID, SealCurrentEpochOptions::for_test());
+        uploader.local_seal_epoch(
+            epoch4,
+            TEST_TABLE_ID,
+            TEST_INSTANCE_ID,
+            SealCurrentEpochOptions::for_test(),
+        );
         uploader.seal_epoch(epoch4);
         let (await_start4_with_3_3, finish_tx4_with_3_3) =
             new_task_notifier(vec![imm4.batch_id(), imm3_3.batch_id()]);
