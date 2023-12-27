@@ -233,6 +233,7 @@ impl<S: StateStore> LookupExecutor<S> {
     pub async fn execute_inner(mut self: Box<Self>) {
         let input = if self.arrangement.use_current_epoch {
             stream_lookup_arrange_this_epoch(
+                //这个两个是上游数据
                 self.stream_executor.take().unwrap(),
                 self.arrangement_executor.take().unwrap(),
             )
@@ -258,6 +259,7 @@ impl<S: StateStore> LookupExecutor<S> {
             .collect_vec();
 
         #[for_await]
+        // 上游两个stream变成chunk，看一看chunk
         for msg in input {
             let msg = msg?;
             self.lookup_cache.evict();
@@ -293,6 +295,7 @@ impl<S: StateStore> LookupExecutor<S> {
 
                     let mut builder = JoinStreamChunkBuilder::new(
                         self.chunk_size,
+                        //print 判断对应的schema
                         reorder_chunk_data_types.clone(),
                         stream_to_output.clone(),
                         arrange_to_output.clone(),
@@ -304,7 +307,7 @@ impl<S: StateStore> LookupExecutor<S> {
                             .await?
                         {
                             tracing::debug!(target: "events::stream::lookup::put", "{:?} {:?}", row, matched_row);
-
+                            // row 打出来
                             if let Some(chunk) = builder.append_row(*op, row, &matched_row) {
                                 yield Message::Chunk(chunk);
                             }

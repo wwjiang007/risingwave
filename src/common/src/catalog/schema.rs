@@ -115,6 +115,7 @@ macro_rules! schema_unnamed {
 /// the schema of the executor's return data
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Schema {
+    // 输出的chunk的schemda就长这样
     pub fields: Vec<Field>,
 }
 
