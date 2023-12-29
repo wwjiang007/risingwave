@@ -14,22 +14,18 @@
 
 package com.risingwave.connector.catalog;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkArgument;
+
+import java.util.HashMap;
+import java.util.Objects;
 import org.apache.iceberg.CatalogUtil;
-import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.CatalogHandlers;
 import org.apache.iceberg.rest.requests.UpdateTableRequest;
 import org.apache.iceberg.rest.responses.LoadTableResponse;
 
-import java.util.HashMap;
-import java.util.Objects;
-
-/**
- * This class provide jni interface to iceberg catalog.
- */
+/** This class provide jni interface to iceberg catalog. */
 public class JniCatalogWrapper {
     private final Catalog catalog;
 
@@ -58,7 +54,8 @@ public class JniCatalogWrapper {
      * @throws Exception
      */
     public String updateTable(String updateTableRequest) throws Exception {
-        UpdateTableRequest req = RESTObjectMapper.mapper().readValue(updateTableRequest, UpdateTableRequest.class);
+        UpdateTableRequest req =
+                RESTObjectMapper.mapper().readValue(updateTableRequest, UpdateTableRequest.class);
         LoadTableResponse resp = CatalogHandlers.updateTable(catalog, req.identifier(), req);
         return RESTObjectMapper.mapper().writer().writeValueAsString(resp);
     }
@@ -66,13 +63,15 @@ public class JniCatalogWrapper {
     /**
      * Create JniCatalogWrapper instance.
      *
-     * @param name      Catalog name.
+     * @param name Catalog name.
      * @param klassName Delegated catalog class name.
-     * @param props     Catalog properties.
+     * @param props Catalog properties.
      * @return JniCatalogWrapper instance.
      */
     public static JniCatalogWrapper create(String name, String klassName, String[] props) {
-        Preconditions.checkArgument(props.length % 2 == 0, "props should be key-value pairs, but length is: " + props.length);
+        checkArgument(
+                props.length % 2 == 0,
+                "props should be key-value pairs, but length is: " + props.length);
         try {
             HashMap<String, String> config = new HashMap<>(props.length / 2);
             for (int i = 0; i < props.length; i += 2) {
