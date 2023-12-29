@@ -28,11 +28,13 @@ pub fn time_zone_err(inner_err: String) -> ExprError {
     }
 }
 
+// capture context based implementation
 #[function("at_time_zone(timestamp) -> timestamptz")]
 fn timestamp_at_time_zone(input: Timestamp) -> Result<Timestamptz> {
     timestamp_at_time_zone_impl_captured(input)
 }
 
+// rewrite based implementation
 #[function("at_time_zone(timestamp, varchar) -> timestamptz")]
 fn timestamp_at_time_zone1(input: Timestamp, time_zone: &str) -> Result<Timestamptz> {
     timestamp_at_time_zone_impl(time_zone, input)
@@ -64,9 +66,16 @@ pub fn timestamp_at_time_zone_impl(time_zone: &str, input: Timestamp) -> Result<
     Ok(Timestamptz::from_micros(usec))
 }
 
+// capture context based implementation
 #[function("at_time_zone(timestamptz) -> timestamp")]
 fn timestamptz_at_time_zone(input: Timestamptz) -> Result<Timestamp> {
     timestamptz_at_time_zone_impl_captured(input)
+}
+
+// rewrite based implementation
+#[function("at_time_zone(timestamptz, varchar) -> timestamp")]
+fn timestamptz_at_time_zone1(input: Timestamptz, time_zone: &str) -> Result<Timestamp> {
+    timestamptz_at_time_zone_impl(time_zone, input)
 }
 
 #[capture_context(TIME_ZONE)]
@@ -77,14 +86,20 @@ pub fn timestamptz_at_time_zone_impl(time_zone: &str, input: Timestamptz) -> Res
     Ok(Timestamp(naive))
 }
 
+// capture context based implementation
 #[function("cast_with_time_zone(timestamptz) -> varchar")]
 fn timestamptz_to_string(elem: Timestamptz, writer: &mut impl Write) -> Result<()> {
     timestamptz_to_string_impl_captured(elem, writer)
 }
 
-#[function("at_time_zone(timestamptz, varchar) -> timestamp")]
-fn timestamptz_at_time_zone1(input: Timestamptz, time_zone: &str) -> Result<Timestamp> {
-    timestamptz_at_time_zone_impl(time_zone, input)
+// rewrite based implementation
+#[function("cast_with_time_zone(timestamptz, varchar) -> varchar")]
+fn timestamptz_to_string_capture(
+    elem: Timestamptz,
+    time_zone: &str,
+    writer: &mut impl Write,
+) -> Result<()> {
+    timestamptz_to_string_impl(time_zone, elem, writer)
 }
 
 #[capture_context(TIME_ZONE)]
@@ -104,29 +119,20 @@ fn timestamptz_to_string_impl(
     Ok(())
 }
 
-// // Tries to interpret the string with a timezone, and if failing, tries to interpret the string as a
-// // timestamp and then adjusts it with the session timezone.
-// #[function("cast_with_time_zone(varchar, varchar) -> timestamptz")]
-// fn str_to_timestamptz(elem: &str, time_zone: &str) -> Result<Timestamptz> {
-//     elem.parse().or_else(|_| {
-//         timestamp_at_time_zone(
-//             elem.parse::<Timestamp>()
-//                 .map_err(|err| ExprError::Parse(err.to_report_string().into()))?,
-//             time_zone,
-//         )
-//     })
-// }
-
+// rewrite based implementation
 #[function("cast_with_time_zone(varchar, varchar) -> timestamptz")]
 fn str_to_timestamptz_legacy(elem: &str, time_zone: &str) -> Result<Timestamptz> {
     str_to_timestamptz_impl(time_zone, elem)
 }
 
+// capture context based implementation
 #[function("cast_with_time_zone(varchar) -> timestamptz")]
 fn str_to_timestamptz(elem: &str) -> Result<Timestamptz> {
     str_to_timestamptz_impl_captured(elem)
 }
 
+// Tries to interpret the string with a timezone, and if failing, tries to interpret the string as a
+// timestamp and then adjusts it with the session timezone.
 #[capture_context(TIME_ZONE)]
 fn str_to_timestamptz_impl(time_zone: &str, elem: &str) -> Result<Timestamptz> {
     elem.parse().or_else(|_| {
@@ -226,14 +232,6 @@ fn timestamptz_interval_quantitative(
     Ok(Timestamptz::from_micros(usecs))
 }
 
-#[function("cast_with_time_zone(timestamptz, varchar) -> varchar")]
-fn timestamptz_to_string_capture(
-    elem: Timestamptz,
-    time_zone: &str,
-    writer: &mut impl Write,
-) -> Result<()> {
-    timestamptz_to_string_impl(time_zone, elem, writer)
-}
 #[cfg(test)]
 mod tests {
     use risingwave_common::util::iter_util::ZipEqFast;
