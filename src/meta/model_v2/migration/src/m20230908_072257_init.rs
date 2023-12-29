@@ -165,6 +165,8 @@ impl MigrationTrait for Migration {
                             .default(Expr::current_timestamp())
                             .not_null(),
                     )
+                    .col(ColumnDef::new(Object::InitializedAtClusterVersion).string())
+                    .col(ColumnDef::new(Object::CreatedAtClusterVersion).string())
                     .foreign_key(
                         &mut ForeignKey::create()
                             .name("FK_object_owner_id")
@@ -669,7 +671,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Index::IndexTableId).integer().not_null())
                     .col(ColumnDef::new(Index::PrimaryTableId).integer().not_null())
                     .col(ColumnDef::new(Index::IndexItems).json().not_null())
-                    .col(ColumnDef::new(Index::OriginalColumns).json().not_null())
+                    .col(ColumnDef::new(Index::IndexColumnsLen).integer().not_null())
                     .foreign_key(
                         &mut ForeignKey::create()
                             .name("FK_index_object_id")
@@ -1084,7 +1086,7 @@ enum Index {
     IndexTableId,
     PrimaryTableId,
     IndexItems,
-    OriginalColumns,
+    IndexColumnsLen,
 }
 
 #[derive(DeriveIden)]
@@ -1110,6 +1112,8 @@ enum Object {
     DatabaseId,
     InitializedAt,
     CreatedAt,
+    InitializedAtClusterVersion,
+    CreatedAtClusterVersion,
 }
 
 #[derive(DeriveIden)]
