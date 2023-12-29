@@ -20,7 +20,7 @@ use chrono::format::{Item, StrftimeItems};
 use chrono::{Datelike, NaiveDate};
 use risingwave_common::types::{Interval, Timestamp, Timestamptz};
 use risingwave_expr::expr_context::TIME_ZONE;
-use risingwave_expr::{capture_context, function, Result, ExprError};
+use risingwave_expr::{capture_context, function, ExprError, Result};
 
 use super::timestamptz::time_zone_err;
 use crate::scalar::arithmetic_op::timestamp_interval_add;
@@ -193,6 +193,7 @@ fn timestamp_to_char(data: Timestamp, pattern: &ChronoPattern, writer: &mut impl
     write!(writer, "{}", format).unwrap();
 }
 
+// capture context based implementation
 #[function(
     "to_char(timestamptz, varchar) -> varchar",
     prebuild = "ChronoPattern::compile($1)"
@@ -203,6 +204,20 @@ fn timestamptz_to_char(
     writer: &mut impl Write,
 ) -> Result<()> {
     timestamptz_to_char_impl_captured(data, tmpl, writer)
+}
+
+// rewrite based implementation
+#[function(
+    "to_char(timestamptz, varchar, varchar) -> varchar",
+    prebuild = "ChronoPattern::compile($1)"
+)]
+fn timestamptz_to_char1(
+    data: Timestamptz,
+    time_zone: &str,
+    tmpl: &ChronoPattern,
+    writer: &mut impl Write,
+) -> Result<()> {
+    timestamptz_to_char_impl(time_zone, data, tmpl, writer)
 }
 
 #[capture_context(TIME_ZONE)]
@@ -406,18 +421,4 @@ fn format_inner(w: &mut impl Write, interval: Interval, item: &Item<'_>) -> Resu
         }
         Item::Error => Err(invalid_pattern_err()),
     }
-}
-
-#[function(
-    "to_char(timestamptz, varchar, varchar) -> varchar",
-    prebuild = "ChronoPattern::compile($1)",
-    deprecated
-)]
-fn timestamptz_to_char_legacy(
-    data: Timestamptz,
-    time_zone: &str,
-    tmpl: &ChronoPattern,
-    writer: &mut impl Write,
-) -> Result<()> {
-    timestamptz_to_char_impl(time_zone, data, tmpl, writer)
 }

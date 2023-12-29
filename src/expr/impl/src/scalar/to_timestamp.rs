@@ -76,12 +76,22 @@ fn f64_sec_to_timestamptz(elem: F64) -> Result<Timestamptz> {
     Ok(Timestamptz::from_micros(micros))
 }
 
+// capture context based implementation
 #[function(
     "to_timestamp1(varchar, varchar) -> timestamptz",
     prebuild = "ChronoPattern::compile($1)"
 )]
 fn to_timestamptz(s: &str, tmpl: &ChronoPattern) -> Result<Timestamptz> {
     to_timestamptz_impl_captured(s, tmpl)
+}
+
+// rewrite based implementation
+#[function(
+    "to_timestamp1(varchar, varchar, varchar) -> timestamptz",
+    prebuild = "ChronoPattern::compile($1)"
+)]
+pub fn to_timestamptz1(s: &str, time_zone: &str, tmpl: &ChronoPattern) -> Result<Timestamptz> {
+    to_timestamptz_impl(time_zone, s, tmpl)
 }
 
 #[capture_context(TIME_ZONE)]
@@ -108,20 +118,6 @@ pub fn to_date(s: &str, tmpl: &ChronoPattern) -> Result<Date> {
         *year += 1;
     }
     Ok(parsed.to_naive_date()?.into())
-}
-
-// kept for backward compatibility
-#[function(
-    "to_timestamp1(varchar, varchar, varchar) -> timestamptz",
-    prebuild = "ChronoPattern::compile($1)",
-    deprecated
-)]
-pub fn to_timestamptz_legacy(
-    s: &str,
-    time_zone: &str,
-    tmpl: &ChronoPattern,
-) -> Result<Timestamptz> {
-    to_timestamptz_impl(time_zone, s, tmpl)
 }
 
 // kept for backward compatibility

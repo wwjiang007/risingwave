@@ -94,7 +94,7 @@ fn timestamptz_to_string(elem: Timestamptz, writer: &mut impl Write) -> Result<(
 
 // rewrite based implementation
 #[function("cast_with_time_zone(timestamptz, varchar) -> varchar")]
-fn timestamptz_to_string_capture(
+fn timestamptz_to_string1(
     elem: Timestamptz,
     time_zone: &str,
     writer: &mut impl Write,
@@ -119,16 +119,16 @@ fn timestamptz_to_string_impl(
     Ok(())
 }
 
-// rewrite based implementation
-#[function("cast_with_time_zone(varchar, varchar) -> timestamptz")]
-fn str_to_timestamptz_legacy(elem: &str, time_zone: &str) -> Result<Timestamptz> {
-    str_to_timestamptz_impl(time_zone, elem)
-}
-
 // capture context based implementation
 #[function("cast_with_time_zone(varchar) -> timestamptz")]
 fn str_to_timestamptz(elem: &str) -> Result<Timestamptz> {
     str_to_timestamptz_impl_captured(elem)
+}
+
+// rewrite based implementation
+#[function("cast_with_time_zone(varchar, varchar) -> timestamptz")]
+fn str_to_timestamptz1(elem: &str, time_zone: &str) -> Result<Timestamptz> {
+    str_to_timestamptz_impl(time_zone, elem)
 }
 
 // Tries to interpret the string with a timezone, and if failing, tries to interpret the string as a
