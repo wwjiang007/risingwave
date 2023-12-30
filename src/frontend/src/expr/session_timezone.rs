@@ -216,18 +216,56 @@ impl SessionTimezone {
                 new_inputs.push(ExprImpl::literal_varchar(self.timezone()));
                 Some(FunctionCall::new(func_type, new_inputs).unwrap().into())
             }
+            // `to_timestamp1(input_string, format_string)`
+            // => `to_timestamp1(input_string, format_string, zone_string)`
+            ExprType::ToTimestamp1 => {
+                if !(inputs.len() == 2
+                    && inputs[0].return_type() == DataType::Varchar
+                    && inputs[1].return_type() == DataType::Varchar)
+                {
+                    return None;
+                }
+                let mut new_inputs = inputs.clone();
+                new_inputs.push(ExprImpl::literal_varchar(self.timezone()));
+                Some(FunctionCall::new(func_type, new_inputs).unwrap().into())
+            }
+            // `to_char(input_timestamptz, format_string)`
+            // => `to_char(input_timestamptz, format_string, zone_string)`
+            ExprType::ToChar => {
+                if !(inputs.len() == 2
+                    && inputs[0].return_type() == DataType::Timestamptz
+                    && inputs[1].return_type() == DataType::Varchar)
+                {
+                    return None;
+                }
+                let mut new_inputs = inputs.clone();
+                new_inputs.push(ExprImpl::literal_varchar(self.timezone()));
+                Some(FunctionCall::new(func_type, new_inputs).unwrap().into())
+            }
             _ => None,
         }
     }
 
     fn at_timezone(&self, input: ExprImpl) -> ExprImpl {
-        FunctionCall::new(ExprType::AtTimeZone, vec![input])
-            .unwrap()
-            .into()
+        FunctionCall::new(
+            ExprType::AtTimeZone,
+            vec![input, ExprImpl::literal_varchar(self.timezone.clone())],
+        )
+        .unwrap()
+        .into()
+        // FunctionCall::new(ExprType::AtTimeZone, vec![input])
+        //     .unwrap()
+        //     .into()
     }
 
     fn cast_with_timezone(&self, input: ExprImpl, return_type: DataType) -> ExprImpl {
-        FunctionCall::new_unchecked(ExprType::CastWithTimeZone, vec![input], return_type).into()
+        FunctionCall::new_unchecked(
+            ExprType::CastWithTimeZone,
+            vec![input, ExprImpl::literal_varchar(self.timezone.clone())],
+            return_type,
+        )
+        .into()
+        // FunctionCall::new_unchecked(ExprType::CastWithTimeZone, vec![input], return_type).into()
     }
 }
 
