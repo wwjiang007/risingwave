@@ -512,7 +512,6 @@ impl WatermarkAnalyzer {
                     _ => WatermarkDerivation::None,
                 }
             }
-
             ExprType::AtTimeZone => match self.visit_binary_op(func_call.inputs()) {
                 (Constant, Constant) => Constant,
                 (derivation @ (Watermark(_) | Nondecreasing), Constant) => {
