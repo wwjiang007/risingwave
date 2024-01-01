@@ -182,16 +182,22 @@ impl SessionTimezone {
                         ExprType::Subtract => ExprType::SubtractWithTimeZone,
                         _ => unreachable!(),
                     };
-                    let rewritten_expr = FunctionCall::new(
-                        new_type,
-                        vec![
-                            orig_timestamptz,
-                            interval,
-                            ExprImpl::literal_varchar(self.timezone()),
-                        ],
-                    )
-                    .unwrap()
-                    .into();
+                    let rewritten_expr = if self.enable_timezone_rewriting {
+                        FunctionCall::new(
+                            new_type,
+                            vec![
+                                orig_timestamptz,
+                                interval,
+                                ExprImpl::literal_varchar(self.timezone()),
+                            ],
+                        )
+                        .unwrap()
+                        .into()
+                    } else {
+                        FunctionCall::new(new_type, vec![orig_timestamptz, interval])
+                            .unwrap()
+                            .into()
+                    };
                     return Some(rewritten_expr);
                 }
                 None

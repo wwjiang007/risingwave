@@ -157,24 +157,56 @@ pub fn timestamptz_timestamptz_sub(l: Timestamptz, r: Timestamptz) -> Result<Int
     Ok(interval)
 }
 
+// capture context based implementation
+#[function("subtract_with_time_zone(timestamptz, interval) -> timestamptz")]
+pub fn timestamptz_interval_sub(input: Timestamptz, interval: Interval) -> Result<Timestamptz> {
+    timestamptz_interval_sub_impl_captured(input, interval)
+}
+
+// rewrite based implementation
 #[function("subtract_with_time_zone(timestamptz, interval, varchar) -> timestamptz")]
-pub fn timestamptz_interval_sub(
+pub fn timestamptz_interval_sub1(
     input: Timestamptz,
     interval: Interval,
     time_zone: &str,
 ) -> Result<Timestamptz> {
-    timestamptz_interval_add(
+    timestamptz_interval_sub_impl(time_zone, input, interval)
+}
+
+#[capture_context(TIME_ZONE)]
+pub fn timestamptz_interval_sub_impl(
+    time_zone: &str,
+    input: Timestamptz,
+    interval: Interval,
+) -> Result<Timestamptz> {
+    timestamptz_interval_add_impl(
+        time_zone,
         input,
         interval.checked_neg().ok_or(ExprError::NumericOverflow)?,
-        time_zone,
     )
 }
 
+// capture context based implementation
+#[function("add_with_time_zone(timestamptz, interval) -> timestamptz")]
+pub fn timestamptz_interval_add(input: Timestamptz, interval: Interval) -> Result<Timestamptz> {
+    timestamptz_interval_add_impl_captured(input, interval)
+}
+
+// rewrite based implementation
 #[function("add_with_time_zone(timestamptz, interval, varchar) -> timestamptz")]
-pub fn timestamptz_interval_add(
+pub fn timestamptz_interval_add1(
     input: Timestamptz,
     interval: Interval,
     time_zone: &str,
+) -> Result<Timestamptz> {
+    timestamptz_interval_add_impl(time_zone, input, interval)
+}
+
+#[capture_context(TIME_ZONE)]
+pub fn timestamptz_interval_add_impl(
+    time_zone: &str,
+    input: Timestamptz,
+    interval: Interval,
 ) -> Result<Timestamptz> {
     use num_traits::Zero as _;
 
