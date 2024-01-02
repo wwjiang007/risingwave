@@ -57,7 +57,6 @@ public class TracingSlf4jAdapter implements Logger {
 
     @Override
     public void trace(String format, Object arg1, Object arg2) {
-        new ParameterizedMessage(format, arg1, arg2).getFormattedMessage();
         TracingSlf4jImpl.event(
                 name,
                 TracingSlf4jImpl.TRACE,
