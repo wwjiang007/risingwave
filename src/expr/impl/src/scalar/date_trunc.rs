@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use risingwave_common::types::{Interval, Timestamp, Timestamptz};
-use risingwave_expr::{function, ExprError, Result};
+use risingwave_expr::expr_context::TIME_ZONE;
+use risingwave_expr::{capture_context, function, ExprError, Result};
 
 use super::timestamptz::timestamp_at_time_zone_impl;
 
@@ -52,14 +53,27 @@ pub fn date_trunc_timestamp(field: &str, ts: Timestamp) -> Result<Timestamp> {
     })
 }
 
-#[function("date_trunc(varchar, timestamptz) -> timestamptz", rewritten)]
-fn _date_trunc_timestamptz() {}
+// capture context based implementation
+#[function("date_trunc(varchar, timestamptz) -> timestamptz")]
+fn date_trunc_timestamptz_at_timezone(field: &str, tsz: Timestamptz) -> Result<Timestamptz> {
+    date_trunc_timestamptz_at_timezone_impl_captured(field, tsz)
+}
 
+// rewrite based implementation
 #[function("date_trunc(varchar, timestamptz, varchar) -> timestamptz")]
-pub fn date_trunc_timestamptz_at_timezone(
+pub fn date_trunc_timestamptz_at_timezone1(
     field: &str,
     tsz: Timestamptz,
     timezone: &str,
+) -> Result<Timestamptz> {
+    date_trunc_timestamptz_at_timezone_impl(timezone, field, tsz)
+}
+
+#[capture_context(TIME_ZONE)]
+pub fn date_trunc_timestamptz_at_timezone_impl(
+    timezone: &str,
+    field: &str,
+    tsz: Timestamptz,
 ) -> Result<Timestamptz> {
     use chrono::Offset as _;
 
