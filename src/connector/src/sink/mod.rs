@@ -1,4 +1,4 @@
-// Copyright 2023 RisingWave Labs
+// Copyright 2024 RisingWave Labs
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,15 +79,13 @@ macro_rules! for_all_sinks {
                 { ClickHouse, $crate::sink::clickhouse::ClickHouseSink },
                 { Iceberg, $crate::sink::iceberg::IcebergSink },
                 { Nats, $crate::sink::nats::NatsSink },
-                { RemoteIceberg, $crate::sink::iceberg::RemoteIcebergSink },
                 { Jdbc, $crate::sink::remote::JdbcSink },
-                { DeltaLake, $crate::sink::remote::DeltaLakeSink },
                 { ElasticSearch, $crate::sink::remote::ElasticSearchSink },
                 { Cassandra, $crate::sink::remote::CassandraSink },
                 { HttpJava, $crate::sink::remote::HttpJavaSink },
                 { Doris, $crate::sink::doris::DorisSink },
                 { Starrocks, $crate::sink::starrocks::StarrocksSink },
-                { DeltaLakeRust, $crate::sink::deltalake::DeltaLakeSink },
+                { DeltaLake, $crate::sink::deltalake::DeltaLakeSink },
                 { BigQuery, $crate::sink::big_query::BigQuerySink },
                 { Test, $crate::sink::test_sink::TestSink },
                 { Table, $crate::sink::table::TableSink }
