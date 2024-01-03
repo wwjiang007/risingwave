@@ -94,7 +94,13 @@ impl<F: LogStoreFactory> SinkExecutor<F> {
             .iter()
             .map(|column| Field::from(&column.column_desc))
             .collect();
-        assert_eq!(input_schema.data_types(), info.schema.data_types());
+        // # TODO
+        // Do we have more general way to check this?
+        if let Some(last_field) = info.schema.fields.last() && last_field.name == "_rw_partition"{
+            assert_eq!(input_schema.data_types(), info.schema.data_types()[..info.schema.fields.len()-1]);
+        } else {
+            assert_eq!(input_schema.data_types(), info.schema.data_types());
+        }
 
         Ok(Self {
             actor_context,

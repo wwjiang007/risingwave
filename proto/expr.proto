@@ -259,6 +259,8 @@ message ExprNode {
     JSONB_PATH_QUERY_ARRAY = 622;
     JSONB_PATH_QUERY_FIRST = 623;
 
+    CONSTRUCT_STRUCT = 624;
+
     // Non-pure functions below (> 1000)
     // ------------------------
     // Internal functions
@@ -274,6 +276,14 @@ message ExprNode {
     // System information functions
     PG_GET_INDEXDEF = 2400;
     COL_DESCRIPTION = 2401;
+
+    // EXTERNAL
+    ICEBERG_BUCKET = 2201;
+    ICEBERG_TRUNCATE = 2202;
+    ICEBERG_YEAR = 2203;
+    ICEBERG_MONTH = 2204;
+    ICEBERG_DAY = 2205;
+    ICEBERG_HOUR = 2206;
   }
   Type function_type = 1;
   data.DataType return_type = 3;
@@ -283,7 +293,7 @@ message ExprNode {
     FunctionCall func_call = 6;
     UserDefinedFunction udf = 7;
     NowRexNode now = 8;
-  }
+      }
 }
 
 message TableFunction {

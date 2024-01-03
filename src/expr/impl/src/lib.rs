@@ -36,6 +36,7 @@
 mod aggregate;
 mod scalar;
 mod table_function;
+mod external;
 
 /// Enable functions in this crate.
 #[macro_export]

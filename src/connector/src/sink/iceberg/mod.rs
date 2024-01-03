@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod precomputed_partition_writer;
 mod prometheus;
 
 use std::collections::HashMap;
@@ -19,7 +20,9 @@ use std::fmt::Debug;
 use std::ops::Deref;
 
 use anyhow::anyhow;
-use arrow_schema::{DataType as ArrowDataType, Schema as ArrowSchema, SchemaRef};
+use arrow_schema::{
+    DataType as ArrowDataType, Field as ArrowField, Fields, Schema as ArrowSchema, SchemaRef,
+};
 use async_trait::async_trait;
 use icelake::catalog::{load_catalog, CATALOG_NAME, CATALOG_TYPE};
 use icelake::io_v2::input_wrapper::{DeltaWriter, RecordBatchWriter};
@@ -44,7 +47,6 @@ use url::Url;
 use with_options::WithOptions;
 
 use self::prometheus::monitored_base_file_writer::MonitoredBaseFileWriterBuilder;
-use self::prometheus::monitored_partition_writer::MonitoredFanoutPartitionedWriterBuilder;
 use self::prometheus::monitored_position_delete_writer::MonitoredPositionDeleteWriterBuilder;
 use super::{
     Sink, SinkError, SinkWriterParam, SINK_TYPE_APPEND_ONLY, SINK_TYPE_OPTION, SINK_TYPE_UPSERT,
@@ -152,7 +154,7 @@ impl IcebergConfig {
         Ok(config)
     }
 
-    fn build_iceberg_configs(&self) -> Result<HashMap<String, String>> {
+    pub fn build_iceberg_configs(&self) -> Result<HashMap<String, String>> {
         let mut iceberg_configs = HashMap::new();
 
         let catalog_type = self
@@ -380,6 +382,40 @@ enum IcebergWriterEnum {
 }
 
 impl IcebergWriter {
+    fn schema(table: &Table) -> Result<SchemaRef> {
+        let schema = table.current_arrow_schema()?;
+        // #TODO
+        // When iceberg table is partitioned, we will add a partition column to the schema.
+        // Maybe we should accept a flag from `SinkWriterParam`?
+        if !table
+            .current_table_metadata()
+            .current_partition_spec()?
+            .is_unpartitioned()
+        {
+            let mut fields = schema.fields().to_vec();
+            // # TODO
+            // When convert rw struct to arrow struct, we will compare the type of each field.
+            // To avoid the impact of metadata, we should reconstruct struct type without metadata.
+            // This approach may hack, do we have a better way?
+            let partition_type = if let ArrowDataType::Struct(s) =
+                table.current_partition_type()?.try_into()?
+            {
+                let fields = Fields::from(
+                    s.into_iter()
+                        .map(|field| ArrowField::new(field.name(), field.data_type().clone(), true))
+                        .collect::<Vec<_>>(),
+                );
+                ArrowDataType::Struct(fields)
+            } else {
+                unimplemented!()
+            };
+            fields.push(ArrowField::new("_rw_partition", partition_type, false).into());
+            Ok(ArrowSchema::new(fields).into())
+        } else {
+            Ok(schema)
+        }
+    }
+
     pub async fn new_append_only(table: Table, writer_param: &SinkWriterParam) -> Result<Self> {
         let builder_helper = table.builder_helper()?;
 
@@ -391,10 +427,11 @@ impl IcebergWriter {
                 .iceberg_rolling_unflushed_data_file
                 .clone(),
         ));
-        let partition_data_file_builder = MonitoredFanoutPartitionedWriterBuilder::new(
-            builder_helper.fanout_partition_writer_builder(data_file_builder.clone())?,
-            writer_param.sink_metrics.iceberg_partition_num.clone(),
-        );
+        let partition_data_file_builder =
+            precomputed_partition_writer::PrecomputedPartitionedWriterBuilder::new(
+                data_file_builder.clone(),
+                table.current_partition_type()?,
+            );
         let dispatch_builder = builder_helper
             .dispatcher_writer_builder(partition_data_file_builder, data_file_builder)?;
         // wrap a layer with collect write metrics
@@ -409,7 +446,7 @@ impl IcebergWriter {
                     .clone(),
             ),
         );
-        let schema = table.current_arrow_schema()?;
+        let schema = Self::schema(&table)?;
         let inner_writer = RecordBatchWriter::new(prometheus_builder.build(&schema).await?);
         Ok(Self {
             inner_writer: IcebergWriterEnum::AppendOnly(inner_writer),
@@ -446,10 +483,11 @@ impl IcebergWriter {
             equality_delete_builder,
             unique_column_ids,
         );
-        let partition_delta_builder = MonitoredFanoutPartitionedWriterBuilder::new(
-            builder_helper.fanout_partition_writer_builder(delta_builder.clone())?,
-            writer_param.sink_metrics.iceberg_partition_num.clone(),
-        );
+        let partition_delta_builder =
+            precomputed_partition_writer::PrecomputedPartitionedWriterBuilder::new(
+                delta_builder.clone(),
+                table.current_partition_type()?,
+            );
         let dispatch_builder =
             builder_helper.dispatcher_writer_builder(partition_delta_builder, delta_builder)?;
         // wrap a layer with collect write metrics
@@ -464,7 +502,7 @@ impl IcebergWriter {
                     .clone(),
             ),
         );
-        let schema = table.current_arrow_schema()?;
+        let schema = Self::schema(&table)?;
         let inner_writer = DeltaWriter::new(prometheus_builder.build(&schema).await?);
         Ok(Self {
             inner_writer: IcebergWriterEnum::Upsert(inner_writer),
