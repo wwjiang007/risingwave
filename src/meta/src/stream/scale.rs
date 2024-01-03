@@ -2556,6 +2556,8 @@ impl GlobalStreamManager {
                         LocalNotification::WorkerNodeActivated(worker) => {
                             let prev_worker = worker_cache.insert(worker.id, worker.clone());
 
+                            println!("worker node {:#?} joined", worker);
+
                             if let Some(prev_worker) = prev_worker && prev_worker.parallel_units != worker.parallel_units {
                                 tracing::info!(worker = worker.id, "worker parallelism changed");
                             }
