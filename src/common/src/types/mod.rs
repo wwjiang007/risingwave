@@ -869,6 +869,16 @@ impl ScalarImpl {
         std::str::from_utf8(without_null)
     }
 
+    pub fn from_pretty(val_str: &str, data_type: &DataType) -> Result<Option<Self>, FromSqlError> {
+        match val_str {
+            "." => Ok(None),
+            "(empty)" => Ok(Some("".into())),
+            _ => Ok(Some(
+                ScalarImpl::from_text(val_str.as_bytes(), data_type).unwrap(),
+            )),
+        }
+    }
+
     pub fn from_text(bytes: &[u8], data_type: &DataType) -> Result<Self, FromSqlError> {
         let str =
             Self::cstr_to_str(bytes).map_err(|_| FromSqlError::from_text(format!("{bytes:?}")))?;
@@ -948,7 +958,7 @@ impl ScalarImpl {
                 }
                 let mut fields = Vec::with_capacity(s.len());
                 for (s, ty) in str[1..str.len() - 1].split(',').zip_eq_debug(s.types()) {
-                    fields.push(Some(Self::from_text(s.trim().as_bytes(), ty)?));
+                    fields.push(Self::from_pretty(s.trim(), ty)?);
                 }
                 ScalarImpl::Struct(StructValue::new(fields))
             }

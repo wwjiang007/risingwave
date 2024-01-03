@@ -758,11 +758,7 @@ impl DataChunkTestExt for DataChunk {
             for ((builder, ty), val_str) in
                 array_builders.iter_mut().zip(&datatypes).zip(&mut token)
             {
-                let datum = match val_str {
-                    "." => None,
-                    "(empty)" => Some("".into()),
-                    _ => Some(ScalarImpl::from_text(val_str.as_bytes(), ty).unwrap()),
-                };
+                let datum = ScalarImpl::from_pretty(val_str, ty).unwrap();
                 builder.append(datum);
             }
             let visible = match token.next() {
@@ -1073,6 +1069,16 @@ mod tests {
                  3 6",
             )
             .estimated_heap_size()
+        );
+    }
+
+    #[test]
+    fn test_struct_with_null() {
+        let _ = DataChunk::from_pretty(
+            "I <I,I>
+             1 (.,1)
+             2 (1,.)
+             . (.,.)"
         );
     }
 }
