@@ -16,7 +16,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use super::MonitoredGlobalAlloc;
-use crate::metrics::{LabelGuardedIntGauge, TrAdderGauge};
+use crate::metrics::{LabelGuardedIntGauge, LabelGuardedMetricsContext, TrAdderGauge};
 
 pub trait MemCounter: Send + Sync + 'static {
     fn add(&self, bytes: i64);
@@ -33,7 +33,7 @@ impl MemCounter for TrAdderGauge {
     }
 }
 
-impl<const N: usize> MemCounter for LabelGuardedIntGauge<N> {
+impl<const N: usize, C: LabelGuardedMetricsContext> MemCounter for LabelGuardedIntGauge<N, C> {
     fn add(&self, bytes: i64) {
         self.deref().add(bytes)
     }

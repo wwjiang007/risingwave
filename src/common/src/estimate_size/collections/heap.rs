@@ -105,6 +105,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use crate::estimate_size::collections::MemMonitoredHeap;
     use crate::memory::MemoryContext;
     use crate::metrics::LabelGuardedIntGauge;
@@ -130,7 +131,8 @@ mod tests {
     #[test]
     fn test_heap_drop() {
         let gauge = LabelGuardedIntGauge::<4>::test_int_gauge();
-        let mem_ctx = MemoryContext::root(gauge.clone());
+        let g: LabelGuardedIntGauge<4> = LabelGuardedIntGauge::<4>::clone(&gauge);
+        let mem_ctx = MemoryContext::root(g);
 
         let vec = {
             let mut heap = MemMonitoredHeap::<u8>::new_with(mem_ctx);
