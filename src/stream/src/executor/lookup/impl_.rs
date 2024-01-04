@@ -233,7 +233,7 @@ impl<S: StateStore> LookupExecutor<S> {
     pub async fn execute_inner(mut self: Box<Self>) {
         let input = if self.arrangement.use_current_epoch {
             stream_lookup_arrange_this_epoch(
-                //这个两个是上游数据
+                // 这个两个是上游数据
                 self.stream_executor.take().unwrap(),
                 self.arrangement_executor.take().unwrap(),
             )
@@ -246,6 +246,7 @@ impl<S: StateStore> LookupExecutor<S> {
             .boxed()
         };
 
+        // 问题根源在这里，这个拿到的 arrange_to_output 有问题，需要invest
         let (stream_to_output, arrange_to_output) = JoinStreamChunkBuilder::get_i2o_mapping(
             &self.column_mapping,
             self.stream.col_types.len(),
@@ -292,7 +293,8 @@ impl<S: StateStore> LookupExecutor<S> {
                 ArrangeMessage::Stream(chunk) => {
                     let chunk = chunk.compact();
                     let (chunk, ops) = chunk.into_parts();
-
+                    
+                    // 怀疑这个builder有问题，这个里面的 arrange_to_output 有问题
                     let mut builder = JoinStreamChunkBuilder::new(
                         self.chunk_size,
                         //print 判断对应的schema
@@ -306,8 +308,12 @@ impl<S: StateStore> LookupExecutor<S> {
                             .lookup_one_row(&row, self.last_barrier.as_ref().unwrap().epoch)
                             .await?
                         {
-                            tracing::debug!(target: "events::stream::lookup::put", "{:?} {:?}", row, matched_row);
-                            // row 打出来
+                            tracing::info!(target: "events::stream::lookup::put", "{:?} {:?}", row, matched_row);
+                            tracing::info!("Yufan row: {:?}, matched_row {:?}", row, matched_row);
+                            // 这里面穿进去的row是有问题的,导致出现了int16的数据，理论上不应该
+                            // row: [Some(Decimal(Normalized(1))), Some(Int32(4)), Some(Serial(Serial(362824135644807168)))]
+                            // matched_row OwnedRow([Some(Decimal(Normalized(1))), Some(Int16(2)), Some(Int32(4)), Some(Serial(Serial(362824135644807168)))])
+                            // match row里面的数据出问题了，这里面有int16的数据，然后在下面映射出错误了
                             if let Some(chunk) = builder.append_row(*op, row, &matched_row) {
                                 yield Message::Chunk(chunk);
                             }
@@ -353,7 +359,7 @@ impl<S: StateStore> LookupExecutor<S> {
         let lookup_row = stream_row
             .project(&self.key_indices_mapping)
             .into_owned_row();
-        let table_id_str = self.arrangement.storage_table.table_id().to_string();
+                let table_id_str = self.arrangement.storage_table.table_id().to_string();
         let actor_id_str = self.ctx.id.to_string();
         let fragment_id_str = self.ctx.fragment_id.to_string();
         self.ctx
@@ -407,7 +413,7 @@ impl<S: StateStore> LookupExecutor<S> {
             pin_mut!(all_data_iter);
             while let Some(row) = all_data_iter.next_row().await? {
                 // Only need value (include storage pk).
-                all_rows.push(row);
+                                all_rows.push(row);
             }
         }
 

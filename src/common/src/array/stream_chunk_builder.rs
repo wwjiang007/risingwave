@@ -96,6 +96,16 @@ impl StreamChunkBuilder {
     ) -> Option<StreamChunk> {
         self.ops.push(op);
         for (i, datum) in iter {
+            tracing::info!(
+                "datum = {:?} self.column_builders= {:?}, data types: {:?}",
+                datum,
+                self.column_builders[i], self.data_types
+            );
+            if let Some(v) = datum {
+                tracing::info!("datum = {:?}", v);
+            } else{
+                tracing::info!("datum = None");
+            }
             self.column_builders[i].append(datum);
         }
         self.inc_size()
