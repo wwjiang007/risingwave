@@ -140,6 +140,14 @@ impl HeaderBuilder {
         self
     }
 
+    pub fn add_partial_update(mut self, partial_update: Option<String>) -> Self {
+        if let Some(_partial_update) = partial_update {
+            self.header
+                .insert("partial_update".to_string(), "true".to_string());
+        }
+        self
+    }
+
     pub fn build(self) -> HashMap<String, String> {
         self.header
     }
