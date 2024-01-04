@@ -17,16 +17,18 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 use risingwave_common::estimate_size::EstimateSize;
 use risingwave_common::row::OwnedRow;
-use risingwave_common::types::{Datum, DefaultOrdered, Sentinelled};
+use risingwave_common::types::{Datum, DefaultOrdered, ScalarImpl, Sentinelled};
 use risingwave_common::util::memcmp_encoding::MemcmpEncoded;
 use smallvec::SmallVec;
 
 use super::{WindowFuncCall, WindowFuncKind};
 use crate::{ExprError, Result};
 
-mod buffer;
-
 mod aggregate;
+mod aggregate_range;
+mod buffer;
+mod buffer_range;
+mod range_utils;
 mod rank;
 
 /// Unique and ordered identifier for a row in internal states.
@@ -122,7 +124,16 @@ pub fn create_window_state(call: &WindowFuncCall) -> Result<Box<dyn WindowState 
         RowNumber => Box::new(rank::RankState::<rank::RowNumber>::new(call)),
         Rank => Box::new(rank::RankState::<rank::Rank>::new(call)),
         DenseRank => Box::new(rank::RankState::<rank::DenseRank>::new(call)),
-        Aggregate(_) => Box::new(aggregate::AggregateState::new(call)?),
+        Aggregate(_) => {
+            if call.frame.is_rows() {
+                Box::new(aggregate::AggregateState::new(&call)?)
+            } else if call.frame.is_range() {
+                // TODO(): unify RangeAggregateState and AggregateState
+                Box::new(aggregate_range::RangeAggregateState::new(&call)?)
+            } else {
+                unreachable!()
+            }
+        }
         kind => {
             return Err(ExprError::UnsupportedFunction(format!(
                 "{}({}) -> {}",

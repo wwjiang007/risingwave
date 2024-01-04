@@ -25,7 +25,6 @@ struct Entry<K: Ord, V> {
     value: V,
 }
 
-// TODO(rc): May be a good idea to extract this into a separate crate.
 /// A common sliding window buffer.
 pub struct WindowBuffer<K: Ord, V: Clone> {
     frame: Frame,
@@ -85,6 +84,9 @@ impl<K: Ord, V: Clone> WindowBuffer<K, V> {
                         false // unbounded frame start, never preceding-saturated
                     }
                 }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO(): make this only handle ROWS
+                }
             }
     }
 
@@ -109,6 +111,9 @@ impl<K: Ord, V: Clone> WindowBuffer<K, V> {
                     } else {
                         false // unbounded frame end, never following-saturated
                     }
+                }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO(): make this only handle ROWS
                 }
             }
     }
@@ -203,6 +208,9 @@ impl<K: Ord, V: Clone> WindowBuffer<K, V> {
                     // unbounded end
                     self.right_excl_idx = self.buffer.len();
                 }
+            }
+            FrameBounds::Range(_, _) => {
+                todo!() // TODO(): make this only handle ROWS
             }
         }
     }

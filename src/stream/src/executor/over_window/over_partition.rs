@@ -396,6 +396,8 @@ impl<'a, S: StateStore> OverPartition<'a, S> {
                     self::find_affected_ranges(self.calls, DeltaBTreeMap::new(cache_inner, delta));
                 self.stats.lookup_count += 1;
 
+                println!("[rc] ranges: {:?}", ranges);
+
                 if ranges.is_empty() {
                     // no ranges affected, we're done
                     return Ok((DeltaBTreeMap::new(cache_inner, delta), ranges));
@@ -815,12 +817,12 @@ fn find_affected_ranges<'cache>(
     let first_key = part_with_delta.first_key().unwrap();
     let last_key = part_with_delta.last_key().unwrap();
 
-    let start_is_unbounded = calls
-        .iter()
-        .any(|call| call.frame.bounds.start_is_unbounded());
-    let end_is_unbounded = calls
-        .iter()
-        .any(|call| call.frame.bounds.end_is_unbounded());
+    let start_is_unbounded = calls.iter().any(
+        |call| call.frame.bounds.start_is_unbounded() || /* TODO() */ call.frame.bounds.is_range(),
+    );
+    let end_is_unbounded = calls.iter().any(
+        |call| call.frame.bounds.end_is_unbounded() || /* TODO() */ call.frame.bounds.is_range(),
+    );
 
     let first_curr_key = if end_is_unbounded {
         // If the frame end is unbounded, the frame corresponding to the first key is always
@@ -842,6 +844,9 @@ fn find_affected_ranges<'cache>(
                         }
                     }
                     cursor.key().unwrap_or(first_key)
+                }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO()
                 }
             })
             .min()
@@ -866,6 +871,9 @@ fn find_affected_ranges<'cache>(
                     }
                     cursor.key().unwrap_or(first_key)
                 }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO()
+                }
             })
             .min()
             .expect("# of window function calls > 0")
@@ -888,6 +896,9 @@ fn find_affected_ranges<'cache>(
                     }
                     cursor.key().unwrap_or(last_key)
                 }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO()
+                }
             })
             .max()
             .expect("# of window function calls > 0")
@@ -908,6 +919,9 @@ fn find_affected_ranges<'cache>(
                         }
                     }
                     cursor.key().unwrap_or(last_key)
+                }
+                FrameBounds::Range(_, _) => {
+                    todo!() // TODO()
                 }
             })
             .max()

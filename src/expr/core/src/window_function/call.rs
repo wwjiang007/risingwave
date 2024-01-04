@@ -16,7 +16,7 @@ use std::fmt::Display;
 
 use enum_as_inner::EnumAsInner;
 use risingwave_common::bail;
-use risingwave_common::types::DataType;
+use risingwave_common::types::{DataType, ScalarImpl};
 use risingwave_pb::expr::window_frame::{PbBound, PbExclusion};
 use risingwave_pb::expr::{PbWindowFrame, PbWindowFunction};
 
@@ -29,7 +29,7 @@ pub struct WindowFuncCall {
     pub kind: WindowFuncKind,
     pub args: AggArgs,
     pub return_type: DataType,
-    pub frame: Frame,
+    pub frame: Frame, /* TODO(): maybe we can use some FrameImpl type here, WindowFuncCall is only used by backend */
 }
 
 impl WindowFuncCall {
@@ -79,6 +79,14 @@ impl Frame {
         }
     }
 
+    pub fn is_rows(&self) -> bool {
+        self.bounds.is_rows()
+    }
+
+    pub fn is_range(&self) -> bool {
+        self.bounds.is_range()
+    }
+
     pub fn is_unbounded(&self) -> bool {
         self.bounds.is_unbounded()
     }
@@ -109,6 +117,9 @@ impl Frame {
                 end: Some(end.to_protobuf()),
                 exclusion,
             },
+            FrameBounds::Range(_, _) => {
+                todo!() // TODO()
+            }
         }
     }
 }
@@ -117,18 +128,21 @@ impl FrameBounds {
     pub fn validate(&self) -> Result<()> {
         match self {
             Self::Rows(start, end) => FrameBound::validate_bounds(start, end),
+            Self::Range(start, end) => FrameBound::validate_bounds(start, end),
         }
     }
 
     pub fn start_is_unbounded(&self) -> bool {
         match self {
             Self::Rows(start, _) => matches!(start, FrameBound::UnboundedPreceding),
+            Self::Range(start, _) => matches!(start, FrameBound::UnboundedPreceding),
         }
     }
 
     pub fn end_is_unbounded(&self) -> bool {
         match self {
             Self::Rows(_, end) => matches!(end, FrameBound::UnboundedFollowing),
+            Self::Range(_, end) => matches!(end, FrameBound::UnboundedFollowing),
         }
     }
 
@@ -143,16 +157,20 @@ impl Display for FrameBounds {
             Self::Rows(start, end) => {
                 write!(f, "ROWS BETWEEN {} AND {}", start, end)?;
             }
+            Self::Range(start, end) => {
+                // TODO(): display
+                write!(f, "RANGE BETWEEN {:?} AND {:?}", start, end)?;
+            }
         }
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, EnumAsInner)]
 pub enum FrameBounds {
     Rows(FrameBound<usize>, FrameBound<usize>),
     // Groups(FrameBound<usize>, FrameBound<usize>),
-    // Range(FrameBound<ScalarImpl>, FrameBound<ScalarImpl>),
+    Range(FrameBound<ScalarImpl>, FrameBound<ScalarImpl>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
