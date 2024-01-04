@@ -106,6 +106,7 @@ impl SstableStreamIterator {
             )
             .verbose_instrument_await("stream_iter_get_stream")
             .await?;
+        self.task_progress.inc_num_read_io();
         self.block_stream = Some(block_stream);
         Ok(())
     }
@@ -138,6 +139,7 @@ impl SstableStreamIterator {
 
         if let (Some(block_iter), Some(seek_key)) = (self.block_iter.as_mut(), seek_key) {
             block_iter.seek(seek_key);
+            self.task_progress.inc_num_read_io();
 
             if !block_iter.is_valid() {
                 // `seek_key` is larger than everything in the first block.
@@ -170,6 +172,8 @@ impl SstableStreamIterator {
                         let mut block_iter =
                             BlockIterator::new(BlockHolder::from_owned_block(block));
                         block_iter.seek_to_first();
+                        self.task_progress.inc_num_pending_read_io();
+                        self.task_progress.inc_num_read_io();
                         self.seek_block_idx += 1;
                         self.block_iter = Some(block_iter);
                         return Ok(());
@@ -252,9 +256,7 @@ impl SstableStreamIterator {
 
 impl Drop for SstableStreamIterator {
     fn drop(&mut self) {
-        self.task_progress
-            .num_pending_read_io
-            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.task_progress.dec_num_pending_read_io();
     }
 }
 
@@ -396,9 +398,7 @@ impl ConcatSstableIterator {
             if start_index >= end_index {
                 found = false;
             } else {
-                self.task_progress
-                    .num_pending_read_io
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                self.task_progress.inc_num_pending_read_io();
                 let mut sstable_iter = SstableStreamIterator::new(
                     sstable.value().meta.block_metas.clone(),
                     table_info.clone(),

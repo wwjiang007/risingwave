@@ -89,9 +89,14 @@ impl BlockStreamIterator {
     /// Wrapper function for `self.block_stream.next()` which allows us to measure the time needed.
     async fn download_next_block(&mut self) -> HummockResult<Option<(Bytes, Vec<u8>, BlockMeta)>> {
         let (data, _) = match self.block_stream.next_block_impl().await? {
-            None => return Ok(None),
+            None => {
+                return Ok(None);
+            }
             Some(ret) => ret,
         };
+
+        self.task_progress.inc_num_read_io();
+
         let meta = self.sstable.value().meta.block_metas[self.next_block_index].clone();
         let filter_block = self
             .sstable
@@ -159,9 +164,7 @@ impl BlockStreamIterator {
 
 impl Drop for BlockStreamIterator {
     fn drop(&mut self) {
-        self.task_progress
-            .num_pending_read_io
-            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.task_progress.dec_num_pending_read_io();
     }
 }
 
@@ -242,14 +245,14 @@ impl ConcatSstableIterator {
                 .await?;
             let stats_ptr = self.stats.remote_io_time.clone();
             let now = Instant::now();
-            self.task_progress
-                .num_pending_read_io
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.task_progress.inc_num_pending_read_io();
             let block_stream = self
                 .sstable_store
                 .get_stream_for_blocks(sstable.value().id, &sstable.value().meta.block_metas)
                 .verbose_instrument_await("stream_iter_get_stream")
                 .await?;
+
+            self.task_progress.inc_num_read_io();
 
             // Determine time needed to open stream.
             let add = (now.elapsed().as_secs_f64() * 1000.0).ceil();
@@ -409,7 +412,6 @@ impl CompactorRunner {
 
                     let largest_key = first.current_sstable().current_block_largest();
                     let block_len = block.len() as u64;
-                    let block_key_count = meta.total_key_count;
 
                     if self
                         .executor
@@ -420,7 +422,6 @@ impl CompactorRunner {
                         skip_raw_block_size += block_len;
                         skip_raw_block_count += 1;
                     }
-                    self.executor.may_report_process_key(block_key_count);
                     self.executor.clear();
                 }
                 if !first.current_sstable().is_valid() {
@@ -478,7 +479,6 @@ impl CompactorRunner {
                 } else {
                     let largest_key = sstable_iter.current_block_largest();
                     let block_len = block.len() as u64;
-                    let block_key_count = block_meta.total_key_count;
                     if self
                         .executor
                         .builder
@@ -488,7 +488,6 @@ impl CompactorRunner {
                         skip_raw_block_count += 1;
                         skip_raw_block_size += block_len;
                     }
-                    self.executor.may_report_process_key(block_key_count);
                     self.executor.clear();
                 }
             }
@@ -536,7 +535,6 @@ pub struct CompactTaskExecutor<F: TableBuilderFactory> {
     task_config: TaskConfig,
     task_progress: Arc<TaskProgress>,
     last_key_is_delete: bool,
-    progress_key_num: u32,
 }
 
 impl<F: TableBuilderFactory> CompactTaskExecutor<F> {
@@ -554,7 +552,6 @@ impl<F: TableBuilderFactory> CompactTaskExecutor<F> {
             compaction_statistics: CompactionStatistics::default(),
             last_table_id: None,
             last_table_stats: TableStats::default(),
-            progress_key_num: 0,
             task_progress,
         }
     }
@@ -576,17 +573,6 @@ impl<F: TableBuilderFactory> CompactTaskExecutor<F> {
         self.last_key_is_delete = false;
     }
 
-    #[inline(always)]
-    fn may_report_process_key(&mut self, key_count: u32) {
-        const PROGRESS_KEY_INTERVAL: u32 = 100;
-        self.progress_key_num += key_count;
-        if self.progress_key_num > PROGRESS_KEY_INTERVAL {
-            self.task_progress
-                .inc_progress_key(self.progress_key_num as u64);
-            self.progress_key_num = 0;
-        }
-    }
-
     pub async fn run(
         &mut self,
         iter: &mut BlockIterator,
@@ -596,7 +582,6 @@ impl<F: TableBuilderFactory> CompactTaskExecutor<F> {
             let is_new_user_key =
                 !self.last_key.is_empty() && iter.key().user_key != self.last_key.user_key.as_ref();
             self.compaction_statistics.iter_total_key_counts += 1;
-            self.may_report_process_key(1);
 
             let mut drop = false;
             let epoch = iter.key().epoch_with_gap.pure_epoch();

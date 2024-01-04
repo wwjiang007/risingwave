@@ -414,10 +414,12 @@ message CompactTaskProgress {
   uint64 task_id = 1;
   uint32 num_ssts_sealed = 2;
   uint32 num_ssts_uploaded = 3;
-  uint64 num_progress_key = 4;
+  uint64 num_progress_key = 4 [deprecated = true];
   uint64 num_pending_read_io = 5;
   uint64 num_pending_write_io = 6;
   optional uint64 compaction_group_id = 7;
+  uint64 num_read_io = 8;
+  uint64 num_write_io = 9;
 }
 
 message SubscribeCompactionEventRequest {

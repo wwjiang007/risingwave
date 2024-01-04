@@ -49,12 +49,13 @@ struct TaskHeartbeat {
     task: CompactTask,
     num_ssts_sealed: u32,
     num_ssts_uploaded: u32,
-    num_progress_key: u64,
     num_pending_read_io: u64,
     num_pending_write_io: u64,
+    num_read_io: u64,
+    num_write_io: u64,
+
     create_time: Instant,
     expire_at: u64,
-
     update_at: u64,
 }
 
@@ -255,10 +256,11 @@ impl CompactorManagerInner {
             create_time,
             num_ssts_sealed,
             num_ssts_uploaded,
-            num_progress_key,
             num_pending_read_io,
             num_pending_write_io,
             update_at, // TODO
+            num_read_io,
+            num_write_io,
         } in task_heartbeats.values()
         {
             if *update_at < heartbeat_expiry_ts {
@@ -269,8 +271,8 @@ impl CompactorManagerInner {
             if task_duration_too_long {
                 let compact_task_statistics = statistics_compact_task(task);
                 tracing::info!(
-                    "CompactionGroupId {} Task {} duration too long create_time {:?} expire_at {:?} num_ssts_sealed {} num_ssts_uploaded {} num_progress_key {} \
-                        pending_read_io_count {} pending_write_io_count {} target_level {} \
+                    "CompactionGroupId {} Task {} duration too long create_time {:?} expire_at {:?} num_ssts_sealed {} num_ssts_uploaded {} \
+                        pending_read_io_count {} pending_write_io_count {} read_io_count {} write_io_count {} target_level {} \
                         base_level {} target_sub_level_id {} task_type {} compact_task_statistics {:?}",
                         task.compaction_group_id,
                         task.task_id,
@@ -278,9 +280,10 @@ impl CompactorManagerInner {
                         expire_at,
                         num_ssts_sealed,
                         num_ssts_uploaded,
-                        num_progress_key,
                         num_pending_read_io,
                         num_pending_write_io,
+                        num_read_io,
+                        num_write_io,
                         task.target_level,
                         task.base_level,
                         task.target_sub_level_id,
@@ -303,9 +306,10 @@ impl CompactorManagerInner {
                 task,
                 num_ssts_sealed: 0,
                 num_ssts_uploaded: 0,
-                num_progress_key: 0,
                 num_pending_read_io: 0,
                 num_pending_write_io: 0,
+                num_read_io: 0,
+                num_write_io: 0,
                 create_time: Instant::now(),
                 expire_at: now + self.task_expiry_seconds,
                 update_at: now,
@@ -332,13 +336,15 @@ impl CompactorManagerInner {
 
                 if task_ref.num_ssts_sealed < progress.num_ssts_sealed
                     || task_ref.num_ssts_uploaded < progress.num_ssts_uploaded
-                    || task_ref.num_progress_key < progress.num_progress_key
+                    || task_ref.num_read_io < progress.num_read_io
+                    || task_ref.num_write_io < progress.num_write_io
                 {
                     // Refresh the expiry of the task as it is showing progress.
                     task_ref.expire_at = now + self.task_expiry_seconds;
                     task_ref.num_ssts_sealed = progress.num_ssts_sealed;
                     task_ref.num_ssts_uploaded = progress.num_ssts_uploaded;
-                    task_ref.num_progress_key = progress.num_progress_key;
+                    task_ref.num_read_io = progress.num_read_io;
+                    task_ref.num_write_io = progress.num_write_io;
                 }
                 task_ref.num_pending_read_io = progress.num_pending_read_io;
                 task_ref.num_pending_write_io = progress.num_pending_write_io;
@@ -365,10 +371,12 @@ impl CompactorManagerInner {
                 task_id: hb.task.task_id,
                 num_ssts_sealed: hb.num_ssts_sealed,
                 num_ssts_uploaded: hb.num_ssts_uploaded,
-                num_progress_key: hb.num_progress_key,
                 num_pending_read_io: hb.num_pending_read_io,
                 num_pending_write_io: hb.num_pending_write_io,
                 compaction_group_id: Some(hb.task.compaction_group_id),
+                num_read_io: hb.num_read_io,
+                num_write_io: hb.num_write_io,
+                ..Default::default()
             })
             .collect()
     }
@@ -519,7 +527,6 @@ mod tests {
             task_id: expired[0].task_id + 1,
             num_ssts_sealed: 1,
             num_ssts_uploaded: 1,
-            num_progress_key: 100,
             ..Default::default()
         }]);
         assert_eq!(compactor_manager.get_expired_tasks().len(), 1);
@@ -529,7 +536,6 @@ mod tests {
             task_id: expired[0].task_id,
             num_ssts_sealed: 1,
             num_ssts_uploaded: 1,
-            num_progress_key: 100,
             ..Default::default()
         }]);
         assert_eq!(compactor_manager.get_expired_tasks().len(), 0);

@@ -203,9 +203,10 @@ pub async fn list_compaction_status(context: &CtlContext, verbose: bool) -> anyh
             row.add_cell("Task".into());
             row.add_cell("Num SSTs Sealed".into());
             row.add_cell("Num SSTs Uploaded".into());
-            row.add_cell("Num Progress Key".into());
             row.add_cell("Num Pending Read IO".into());
             row.add_cell("Num Pending Write IO".into());
+            row.add_cell("Num Read IO".into());
+            row.add_cell("Num Write IO".into());
             row
         });
         for p in progress {
@@ -213,9 +214,10 @@ pub async fn list_compaction_status(context: &CtlContext, verbose: bool) -> anyh
             row.add_cell(p.task_id.into());
             row.add_cell(p.num_ssts_sealed.into());
             row.add_cell(p.num_ssts_uploaded.into());
-            row.add_cell(p.num_progress_key.into());
             row.add_cell(p.num_pending_read_io.into());
             row.add_cell(p.num_pending_write_io.into());
+            row.add_cell(p.num_read_io.into());
+            row.add_cell(p.num_write_io.into());
             table.add_row(row);
         }
         println!("{table}");

@@ -13,22 +13,25 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use risingwave_hummock_sdk::HummockCompactionTaskId;
+use risingwave_pb::hummock::CompactTaskProgress;
 
 pub type TaskProgressManagerRef = Arc<Mutex<HashMap<HummockCompactionTaskId, Arc<TaskProgress>>>>;
 
 /// The progress of a compaction task.
 #[derive(Default)]
 pub struct TaskProgress {
-    pub num_ssts_sealed: AtomicU32,
-    pub num_ssts_uploaded: AtomicU32,
-    pub num_progress_key: AtomicU64,
-    pub num_pending_read_io: AtomicUsize,
-    pub num_pending_write_io: AtomicUsize,
+    num_ssts_sealed: AtomicU32,
+    num_ssts_uploaded: AtomicU32,
+    num_pending_read_io: AtomicUsize,
+    num_pending_write_io: AtomicUsize,
+
+    num_read_io: AtomicUsize,
+    num_write_io: AtomicUsize,
 }
 
 impl TaskProgress {
@@ -40,9 +43,47 @@ impl TaskProgress {
         self.num_ssts_uploaded.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn inc_progress_key(&self, inc_key_num: u64) {
-        self.num_progress_key
-            .fetch_add(inc_key_num, Ordering::Relaxed);
+    pub fn inc_num_pending_read_io(&self) {
+        self.num_pending_read_io
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn inc_num_pending_write_io(&self) {
+        self.num_pending_write_io
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn dec_num_pending_read_io(&self) {
+        self.num_pending_read_io
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn dec_num_pending_write_io(&self) {
+        self.num_pending_write_io
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn inc_num_read_io(&self) {
+        self.num_read_io
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn inc_num_write_io(&self) {
+        self.num_write_io
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn snapshot(&self, task_id: u64) -> CompactTaskProgress {
+        CompactTaskProgress {
+            task_id,
+            num_ssts_sealed: self.num_ssts_sealed.load(Ordering::Relaxed),
+            num_ssts_uploaded: self.num_ssts_uploaded.load(Ordering::Relaxed),
+            num_pending_read_io: self.num_pending_read_io.load(Ordering::Relaxed) as u64,
+            num_pending_write_io: self.num_pending_write_io.load(Ordering::Relaxed) as u64,
+            num_read_io: self.num_read_io.load(Ordering::Relaxed) as u64,
+            num_write_io: self.num_write_io.load(Ordering::Relaxed) as u64,
+            ..Default::default()
+        }
     }
 }
 

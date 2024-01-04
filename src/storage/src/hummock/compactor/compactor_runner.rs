@@ -696,7 +696,6 @@ pub async fn compact_and_build_sst<F>(
     compactor_metrics: Arc<CompactorMetrics>,
     mut iter: impl HummockIterator<Direction = Forward>,
     mut compaction_filter: impl CompactionFilter,
-    task_progress: Option<Arc<TaskProgress>>,
 ) -> HummockResult<CompactionStatistics>
 where
     F: TableBuilderFactory,
@@ -740,18 +739,7 @@ where
     let mut last_table_stats = TableStats::default();
     let mut last_table_id = None;
     let mut compaction_statistics = CompactionStatistics::default();
-    let mut progress_key_num: u64 = 0;
-    const PROGRESS_KEY_INTERVAL: u64 = 100;
     while iter.is_valid() {
-        progress_key_num += 1;
-
-        if let Some(task_progress) = task_progress.as_ref()
-            && progress_key_num >= PROGRESS_KEY_INTERVAL
-        {
-            task_progress.inc_progress_key(progress_key_num);
-            progress_key_num = 0;
-        }
-
         let mut iter_key = iter.key();
         compaction_statistics.iter_total_key_counts += 1;
 
@@ -796,14 +784,6 @@ where
                         event_key,
                     })
                     .await?;
-            }
-
-            progress_key_num += 1;
-            if let Some(task_progress) = task_progress.as_ref()
-                && progress_key_num >= PROGRESS_KEY_INTERVAL
-            {
-                task_progress.inc_progress_key(progress_key_num);
-                progress_key_num = 0;
             }
         }
 
@@ -908,21 +888,7 @@ where
                     event_key,
                 })
                 .await?;
-            progress_key_num += 1;
-            if let Some(task_progress) = task_progress.as_ref()
-                && progress_key_num >= PROGRESS_KEY_INTERVAL
-            {
-                task_progress.inc_progress_key(progress_key_num);
-                progress_key_num = 0;
-            }
         }
-    }
-
-    if let Some(task_progress) = task_progress.as_ref()
-        && progress_key_num > 0
-    {
-        // Avoid losing the progress_key_num in the last Interval
-        task_progress.inc_progress_key(progress_key_num);
     }
 
     if let Some(last_table_id) = last_table_id.take() {

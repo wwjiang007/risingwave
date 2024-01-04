@@ -28,9 +28,10 @@ pub const RW_HUMMOCK_COMPACT_TASK_PROGRESS: BuiltinTable = BuiltinTable {
         (DataType::Int64, "task_id"),
         (DataType::Int32, "num_ssts_sealed"),
         (DataType::Int32, "num_ssts_uploaded"),
-        (DataType::Int64, "num_progress_key"),
         (DataType::Int64, "num_pending_read_io"),
         (DataType::Int64, "num_pending_write_io"),
+        (DataType::Int64, "num_read_io"),
+        (DataType::Int64, "num_write_io"),
     ],
     pk: &[0],
 };
@@ -61,14 +62,13 @@ fn compact_task_progress_to_rows(
                 compact_task_progress.num_ssts_uploaded as _,
             )),
             Some(ScalarImpl::Int64(
-                compact_task_progress.num_progress_key as _,
-            )),
-            Some(ScalarImpl::Int64(
                 compact_task_progress.num_pending_read_io as _,
             )),
             Some(ScalarImpl::Int64(
                 compact_task_progress.num_pending_write_io as _,
             )),
+            Some(ScalarImpl::Int64(compact_task_progress.num_read_io as _)),
+            Some(ScalarImpl::Int64(compact_task_progress.num_write_io as _)),
         ]));
     }
 

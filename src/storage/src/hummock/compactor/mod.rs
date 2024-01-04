@@ -224,9 +224,7 @@ impl Compactor {
             rets.push(ret);
             if let Some(tracker) = &task_progress {
                 tracker.inc_ssts_uploaded();
-                tracker
-                    .num_pending_write_io
-                    .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                tracker.dec_num_pending_write_io();
             }
             if is_share_buffer_compact {
                 metrics.shared_buffer_to_sstable_size.observe(sst_size as _);
@@ -264,7 +262,7 @@ impl Compactor {
         let mut sst_builder = CapacitySplitTableBuilder::new(
             builder_factory,
             self.context.compactor_metrics.clone(),
-            task_progress.clone(),
+            task_progress,
             self.task_config.is_target_l0_or_lbase,
             self.task_config.table_vnode_partition.clone(),
         );
@@ -275,7 +273,6 @@ impl Compactor {
             self.context.compactor_metrics.clone(),
             iter,
             compaction_filter,
-            task_progress,
         )
         .verbose_instrument_await("compact_and_build_sst")
         .await?;
@@ -763,15 +760,7 @@ fn get_task_progress(
 ) -> Vec<CompactTaskProgress> {
     let mut progress_list = Vec::new();
     for (&task_id, progress) in &*task_progress.lock() {
-        progress_list.push(CompactTaskProgress {
-            task_id,
-            num_ssts_sealed: progress.num_ssts_sealed.load(Ordering::Relaxed),
-            num_ssts_uploaded: progress.num_ssts_uploaded.load(Ordering::Relaxed),
-            num_progress_key: progress.num_progress_key.load(Ordering::Relaxed),
-            num_pending_read_io: progress.num_pending_read_io.load(Ordering::Relaxed) as u64,
-            num_pending_write_io: progress.num_pending_write_io.load(Ordering::Relaxed) as u64,
-            ..Default::default()
-        });
+        progress_list.push(progress.snapshot(task_id));
     }
     progress_list
 }
